@@ -1,0 +1,149 @@
+/**
+ * MergeExecutor
+ * 
+ * Executes the actual merging of mod archives
+ */
+
+import * as fs from 'fs';
+import * as path from 'path';
+import { MergeGroup, MergeOptions, MergeResult, BA2Type } from '../types';
+import { BA2Handler } from '../core/BA2Handler';
+
+export class MergeExecutor {
+  private ba2Handler: BA2Handler;
+
+  constructor() {
+    this.ba2Handler = new BA2Handler();
+  }
+
+  /**
+   * Execute a merge operation
+   */
+  async executeMerge(
+    group: MergeGroup,
+    options: MergeOptions
+  ): Promise<MergeResult> {
+    const errors: string[] = [];
+
+    try {
+      // Validate output directory
+      if (!fs.existsSync(options.outputDirectory)) {
+        fs.mkdirSync(options.outputDirectory, { recursive: true });
+      }
+
+      const outputPath = path.join(options.outputDirectory, group.outputFileName);
+
+      // Check if output file exists
+      if (fs.existsSync(outputPath) && !options.overwriteExisting) {
+        errors.push(`Output file already exists: ${outputPath}`);
+        return {
+          success: false,
+          outputPath,
+          mergedMods: [],
+          fileCount: 0,
+          errors
+        };
+      }
+
+      // Create backup if requested
+      if (options.createBackup && fs.existsSync(outputPath)) {
+        const backupPath = `${outputPath}.backup`;
+        fs.copyFileSync(outputPath, backupPath);
+      }
+
+      // Collect all archives from the group
+      const allArchives = group.mods.flatMap(mod => mod.archives);
+      
+      if (allArchives.length === 0) {
+        errors.push('No archives to merge');
+        return {
+          success: false,
+          outputPath,
+          mergedMods: [],
+          fileCount: 0,
+          errors
+        };
+      }
+
+      // Determine archive type (all should be same type)
+      const archiveType = allArchives[0].type;
+
+      // Perform the merge
+      const mergeSuccess = await this.ba2Handler.mergeArchives(
+        allArchives,
+        outputPath,
+        archiveType
+      );
+
+      if (!mergeSuccess) {
+        errors.push('Merge operation failed');
+        return {
+          success: false,
+          outputPath,
+          mergedMods: [],
+          fileCount: 0,
+          errors
+        };
+      }
+
+      // Validate after merge if requested
+      if (options.validateAfterMerge) {
+        const valid = this.ba2Handler.isValidBA2(outputPath);
+        if (!valid) {
+          errors.push('Merged archive failed validation');
+          return {
+            success: false,
+            outputPath,
+            mergedMods: group.mods.map(m => m.name),
+            fileCount: 0,
+            errors
+          };
+        }
+      }
+
+      // Calculate total file count
+      const totalFiles = allArchives.reduce((sum, archive) => sum + archive.files.length, 0);
+
+      return {
+        success: true,
+        outputPath,
+        mergedMods: group.mods.map(m => m.name),
+        fileCount: totalFiles,
+        errors: []
+      };
+    } catch (error) {
+      errors.push(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+      return {
+        success: false,
+        outputPath: '',
+        mergedMods: [],
+        fileCount: 0,
+        errors
+      };
+    }
+  }
+
+  /**
+   * Execute multiple merge operations
+   */
+  async executeMerges(
+    groups: MergeGroup[],
+    options: MergeOptions
+  ): Promise<MergeResult[]> {
+    const results: MergeResult[] = [];
+
+    for (const group of groups) {
+      console.log(`Merging ${group.name}...`);
+      const result = await this.executeMerge(group, options);
+      results.push(result);
+
+      if (result.success) {
+        console.log(`✓ Successfully merged ${result.mergedMods.length} mods`);
+      } else {
+        console.error(`✗ Merge failed: ${result.errors.join(', ')}`);
+      }
+    }
+
+    return results;
+  }
+}
