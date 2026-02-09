@@ -2,8 +2,19 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![GitHub release](https://img.shields.io/github/v/release/POINTYTHRUNDRA654/Mossy-manager.)](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases/latest)
 
 **Mossy Manager** is a comprehensive tool for managing Mod Organizer 2 (MO2) installations, with **advanced Fallout 4 support**. It provides powerful features for load order management, conflict resolution, and patch creation to help you maintain a stable and optimized modded game setup.
+
+## 🚀 Quick Start
+
+**Want to get started right away?**
+
+1. 📥 **[Download the Latest Release](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases/latest)** - Get the executable (no Python needed!)
+2. 📖 **[Read the Quick Start Guide](QUICKSTART.md)** - Get up and running in 5 minutes
+3. 🎮 **Run**: `MossyManager.exe auto --profile "Default"` - Optimize your Fallout 4 setup automatically!
+
+**Need help downloading?** See [HOW_TO_DOWNLOAD.md](HOW_TO_DOWNLOAD.md) for detailed instructions.
 
 ## 🌟 NEW: Fallout 4 Advanced Integration
 
