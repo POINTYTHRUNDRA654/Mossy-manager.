@@ -15,8 +15,11 @@ import { MergeValidator } from '../merging/MergeValidator';
 import { MergePlanner } from '../merging/MergePlanner';
 import { MergeExecutor } from '../merging/MergeExecutor';
 import { MergeOptions } from '../types';
+import { ConfigManager } from '../utils/ConfigManager';
+import { ModManagerDetector } from '../utils/ModManagerDetector';
 
 const program = new Command();
+const config = new ConfigManager();
 
 program
   .name('mossy-manager')
@@ -319,12 +322,115 @@ program
         console.log(chalk.green('\n✓ Merge completed successfully!'));
         console.log(chalk.dim(`\nMerged archives saved to: ${options.output}`));
         console.log(chalk.yellow('\n⚠ Important: Test the merged archives in-game before removing originals!'));
+        
+        // Save to config for next time
+        config.updateLastDirectory(directory);
       }
 
     } catch (error) {
       console.error(chalk.red('\n✗ Error during merge:'), error instanceof Error ? error.message : error);
       process.exit(1);
     }
+  });
+
+// Detect command - Find installed mod managers
+program
+  .command('detect')
+  .description('Detect installed mod managers and suggest directories')
+  .action(async () => {
+    console.log(chalk.cyan('\n🔍 Detecting installed mod managers...\n'));
+    
+    const detector = new ModManagerDetector();
+    const managers = detector.detectAll();
+    
+    if (managers.length === 0) {
+      console.log(chalk.yellow('⚠ No mod managers detected'));
+      console.log(chalk.dim('\nSupported mod managers:'));
+      console.log(chalk.dim('  • Mod Organizer 2 (MO2)'));
+      console.log(chalk.dim('  • Vortex'));
+      
+      // Show common game directories
+      const gameDirs = detector.getCommonGameDirectories();
+      if (gameDirs.length > 0) {
+        console.log(chalk.cyan('\n📁 Detected game installations:'));
+        gameDirs.forEach(dir => {
+          console.log(chalk.green(`  • ${dir}`));
+        });
+      }
+      return;
+    }
+    
+    console.log(chalk.green(`✓ Found ${managers.length} mod manager(s):\n`));
+    
+    managers.forEach((manager, index) => {
+      console.log(chalk.bold(`${index + 1}. ${manager.name}`));
+      console.log(chalk.dim(`   Installation: ${manager.path}`));
+      console.log(chalk.cyan(`   Mods Directory: ${manager.modsDirectory}`));
+      
+      // Check if mods directory has content
+      try {
+        const modDirs = fs.readdirSync(manager.modsDirectory, { withFileTypes: true })
+          .filter(dirent => dirent.isDirectory())
+          .length;
+        console.log(chalk.green(`   ✓ ${modDirs} mod folder(s) found`));
+      } catch (error) {
+        console.log(chalk.yellow('   ⚠ Cannot read mods directory'));
+      }
+      console.log('');
+    });
+    
+    console.log(chalk.bold('💡 Quick start:'));
+    if (managers.length > 0) {
+      const firstManager = managers[0];
+      console.log(chalk.cyan(`\n  Scan mods:`));
+      console.log(chalk.dim(`  $ mossy-manager scan "${firstManager.modsDirectory}"`));
+      console.log(chalk.cyan(`\n  Check compatibility:`));
+      console.log(chalk.dim(`  $ mossy-manager check "${firstManager.modsDirectory}"`));
+      console.log(chalk.cyan(`\n  Merge mods:`));
+      console.log(chalk.dim(`  $ mossy-manager merge "${firstManager.modsDirectory}" --dry-run`));
+    }
+  });
+
+// Config command - Manage configuration
+program
+  .command('config')
+  .description('View or update configuration')
+  .option('--show', 'Show current configuration')
+  .option('--set-output <path>', 'Set default output directory')
+  .option('--enable-backup', 'Enable backups by default')
+  .option('--disable-backup', 'Disable backups by default')
+  .action(async (options: any) => {
+    if (options.show || (!options.setOutput && !options.enableBackup && !options.disableBackup)) {
+      console.log(chalk.cyan('\n⚙️ Current Configuration:\n'));
+      const currentConfig = config.getAll();
+      
+      if (Object.keys(currentConfig).length === 0) {
+        console.log(chalk.dim('  No configuration set (using defaults)'));
+      } else {
+        Object.entries(currentConfig).forEach(([key, value]) => {
+          console.log(`  ${chalk.bold(key)}: ${chalk.green(String(value))}`);
+        });
+      }
+      console.log('');
+      return;
+    }
+    
+    if (options.setOutput) {
+      config.set('defaultOutputDir', options.setOutput);
+      console.log(chalk.green(`✓ Default output directory set to: ${options.setOutput}`));
+    }
+    
+    if (options.enableBackup) {
+      config.set('defaultBackup', true);
+      console.log(chalk.green('✓ Backups enabled by default'));
+    }
+    
+    if (options.disableBackup) {
+      config.set('defaultBackup', false);
+      console.log(chalk.yellow('⚠ Backups disabled by default'));
+    }
+    
+    config.saveConfig();
   });
 
 // Helper function

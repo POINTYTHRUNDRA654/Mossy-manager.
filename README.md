@@ -51,6 +51,12 @@ npm start -- check /path/to/mods
 npm start -- merge /path/to/mods -o ./merged --validate
 ```
 
+### Auto-detect mod managers
+
+```bash
+npm start -- detect
+```
+
 ## Commands
 
 ### `scan`
@@ -60,12 +66,24 @@ Display information about mods in a directory
 npm start -- scan <directory>
 ```
 
+**Features:**
+- Colorized output for better readability
+- Archive type identification (GENERAL/DDS)
+- Plugin detection (ESP/ESM/ESL)
+- Size information
+
 ### `check`
 Analyze merge compatibility and show suggested groups
 
 ```bash
 npm start -- check <directory>
 ```
+
+**Features:**
+- Smart grouping by archive type
+- Conflict detection
+- Merge recommendations
+- Impact analysis (reduction percentage)
 
 ### `merge`
 Execute mod merging operations
@@ -78,7 +96,49 @@ Options:
   --no-backup          Skip creating backups
   --overwrite          Overwrite existing merged archives
   --validate           Validate merged archives
+  --dry-run            Preview merge without executing
+  -y, --yes            Skip confirmation prompts
 ```
+
+**Features:**
+- Dry-run mode for safe preview
+- Interactive confirmation
+- Detailed merge plan display
+- Progress indicators
+- Comprehensive error handling
+
+### `detect`
+Auto-detect installed mod managers
+
+```bash
+npm start -- detect
+```
+
+**Features:**
+- Detects Mod Organizer 2 (MO2)
+- Detects Vortex
+- Shows game installation paths
+- Provides quick-start commands
+
+### `config`
+View or update configuration
+
+```bash
+# Show current config
+npm start -- config --show
+
+# Set default output directory
+npm start -- config --set-output /path/to/output
+
+# Enable/disable backups by default
+npm start -- config --enable-backup
+npm start -- config --disable-backup
+```
+
+**Features:**
+- Persistent configuration
+- Default settings for common options
+- Stores last used directory
 
 ## How It Works
 
