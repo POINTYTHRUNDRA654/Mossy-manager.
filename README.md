@@ -21,7 +21,7 @@ pip install -e .
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/POINTYTHRUNDRA654/Mossy-manager..git
+git clone https://github.com/POINTYTHRUNDRA654/Mossy-manager.git
 cd Mossy-manager.
 ```
 

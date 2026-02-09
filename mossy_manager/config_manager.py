@@ -69,7 +69,7 @@ class ConfigManager:
             value: Configuration value
             section: Configuration section (default: DEFAULT)
         """
-        if section not in self.config:
+        if section not in self.config and section != "DEFAULT":
             self.config.add_section(section)
         
         self.config.set(section, key, str(value))

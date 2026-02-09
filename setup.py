@@ -10,7 +10,7 @@ setup(
     description="A manager tool for Mod Organizer 2 (MO2)",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/POINTYTHRUNDRA654/Mossy-manager.",
+    url="https://github.com/POINTYTHRUNDRA654/Mossy-manager",
     packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
