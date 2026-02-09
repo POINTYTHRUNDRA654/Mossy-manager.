@@ -207,7 +207,7 @@ class Fallout4Rules:
         if any(x in plugin_lower for x in ['far harbor', 'coast', 'dlccoast']):
             dependencies.append('DLCCoast.esm')
         
-        if any(x in plugin_lower for x in ['nuka world', 'nuka-world', 'dlcnukaworld']):
+        if any(x in plugin_lower for x in ['nuka world', 'nuka-world', 'nukaworld', 'dlcnukaworld']):
             dependencies.append('DLCNukaWorld.esm')
         
         if any(x in plugin_lower for x in ['workshop', 'settlement']):

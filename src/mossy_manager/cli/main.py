@@ -566,6 +566,264 @@ def export_patch_xedit(patch_file, xedit_path, target_plugin, output_dir, auto_l
             click.echo(f"Error: {result['error']}")
 
 
+@main.group()
+def fallout4():
+    """Fallout 4 specific commands with advanced load order optimization"""
+    pass
+
+
+@fallout4.command('optimize')
+@click.option('--mo2-path', '-m', type=click.Path(),
+              help='Path to Mod Organizer 2 installation')
+@click.option('--profile', '-p', required=True,
+              help='MO2 profile name')
+@click.option('--backup', is_flag=True, default=True,
+              help='Create backup before optimizing')
+def fo4_optimize(mo2_path, profile, backup):
+    """
+    Optimize Fallout 4 load order using advanced rules
+    
+    This command uses comprehensive Fallout 4 modding knowledge to
+    create an optimized load order based on plugin categories,
+    dependencies, and best practices.
+    """
+    from mossy_manager.integrations.mo2 import MO2Integration
+    from mossy_manager.games.fallout4 import Fallout4Rules
+    
+    click.echo(f"{Fore.CYAN}╔═══════════════════════════════════════════════════════════╗{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}║     Fallout 4 Load Order Optimization - Mossy Manager    ║{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    
+    # Initialize MO2 integration
+    if mo2_path:
+        mo2 = MO2Integration(Path(mo2_path))
+    else:
+        click.echo(f"{Fore.CYAN}Detecting Mod Organizer 2...{Style.RESET_ALL}")
+        mo2_path_detected = MO2Integration.detect_mo2_installation()
+        if mo2_path_detected:
+            click.echo(f"  {Fore.GREEN}✓ Found MO2 at: {mo2_path_detected}{Style.RESET_ALL}")
+            mo2 = MO2Integration(mo2_path_detected)
+        else:
+            click.echo(f"  {Fore.RED}✗ Could not detect MO2 installation{Style.RESET_ALL}")
+            click.echo(f"  Please specify --mo2-path manually")
+            return
+    
+    # Check if profile exists
+    profiles = mo2.list_profiles()
+    if profile not in profiles:
+        click.echo(f"{Fore.RED}Error: Profile '{profile}' not found{Style.RESET_ALL}")
+        click.echo(f"\nAvailable profiles:")
+        for p in profiles:
+            click.echo(f"  • {p}")
+        return
+    
+    click.echo(f"{Fore.CYAN}Profile: {profile}{Style.RESET_ALL}\n")
+    
+    # Read current load order
+    click.echo(f"{Fore.CYAN}Step 1: Reading current load order...{Style.RESET_ALL}")
+    current_plugins = mo2.read_plugins_txt(profile)
+    current_loadorder = mo2.read_loadorder_txt(profile)
+    
+    if not current_loadorder:
+        click.echo(f"  {Fore.RED}✗ No plugins found in profile{Style.RESET_ALL}")
+        return
+    
+    click.echo(f"  {Fore.GREEN}✓ Loaded {len(current_loadorder)} plugins{Style.RESET_ALL}")
+    
+    # Create backup if requested
+    if backup:
+        click.echo(f"\n{Fore.CYAN}Step 2: Creating backup...{Style.RESET_ALL}")
+        profile_path = mo2.get_profile_path(profile)
+        if profile_path:
+            import shutil
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_dir = profile_path.parent / f"{profile}_backup_{timestamp}"
+            shutil.copytree(profile_path, backup_dir)
+            click.echo(f"  {Fore.GREEN}✓ Backup created: {backup_dir.name}{Style.RESET_ALL}")
+    
+    # Validate current load order
+    click.echo(f"\n{Fore.CYAN}Step 3: Validating current load order...{Style.RESET_ALL}")
+    issues = Fallout4Rules.validate_load_order(current_loadorder)
+    
+    if issues['errors']:
+        click.echo(f"  {Fore.RED}Errors found:{Style.RESET_ALL}")
+        for error in issues['errors']:
+            click.echo(f"    • {error}")
+    
+    if issues['warnings']:
+        click.echo(f"  {Fore.YELLOW}Warnings:{Style.RESET_ALL}")
+        for warning in issues['warnings'][:5]:  # Show first 5
+            click.echo(f"    • {warning}")
+        if len(issues['warnings']) > 5:
+            click.echo(f"    ... and {len(issues['warnings']) - 5} more")
+    
+    if not issues['errors'] and not issues['warnings']:
+        click.echo(f"  {Fore.GREEN}✓ No issues found{Style.RESET_ALL}")
+    
+    # Optimize load order
+    click.echo(f"\n{Fore.CYAN}Step 4: Optimizing load order...{Style.RESET_ALL}")
+    optimized = Fallout4Rules.optimize_load_order(current_loadorder)
+    
+    # Show changes
+    changes = 0
+    for i, plugin in enumerate(optimized):
+        if i >= len(current_loadorder) or current_loadorder[i] != plugin:
+            changes += 1
+    
+    click.echo(f"  {Fore.GREEN}✓ Optimization complete{Style.RESET_ALL}")
+    click.echo(f"    Plugins reordered: {changes}")
+    
+    # Get recommendations
+    recommendations = Fallout4Rules.get_recommendations(optimized)
+    if recommendations:
+        click.echo(f"\n{Fore.CYAN}Recommendations:{Style.RESET_ALL}")
+        for rec in recommendations[:3]:
+            click.echo(f"  • {rec}")
+    
+    # Write optimized load order
+    click.echo(f"\n{Fore.CYAN}Step 5: Writing optimized load order...{Style.RESET_ALL}")
+    
+    # Preserve enabled/disabled state
+    optimized_plugins = {}
+    for plugin in optimized:
+        optimized_plugins[plugin] = current_plugins.get(plugin, True)
+    
+    success1 = mo2.write_plugins_txt(profile, optimized_plugins)
+    success2 = mo2.write_loadorder_txt(profile, optimized)
+    
+    if success1 and success2:
+        click.echo(f"  {Fore.GREEN}✓ Load order saved successfully{Style.RESET_ALL}")
+        click.echo(f"\n{Fore.GREEN}═══ Optimization Complete ═══{Style.RESET_ALL}")
+        click.echo(f"\nYour Fallout 4 load order has been optimized!")
+        click.echo(f"Launch the game through Mod Organizer 2 to apply changes.")
+    else:
+        click.echo(f"  {Fore.RED}✗ Error saving load order{Style.RESET_ALL}")
+
+
+@main.command('auto')
+@click.option('--mo2-path', '-m', type=click.Path(),
+              help='Path to Mod Organizer 2 installation')
+@click.option('--profile', '-p', required=True,
+              help='MO2 profile name')
+@click.option('--game', '-g', default='fallout4',
+              type=click.Choice(['fallout4'], case_sensitive=False),
+              help='Game type')
+def auto_optimize(mo2_path, profile, game):
+    """
+    Automatic complete workflow: optimize, detect conflicts, and create patches
+    
+    This command performs the complete Mossy Manager workflow:
+    1. Optimize load order using game-specific rules
+    2. Scan for conflicts
+    3. Generate conflict report
+    4. Suggest patches needed
+    
+    This is the all-in-one solution for getting your game running smoothly!
+    """
+    from mossy_manager.integrations.mo2 import MO2Integration
+    from mossy_manager.games.fallout4 import Fallout4Rules
+    
+    click.echo(f"{Fore.CYAN}╔═══════════════════════════════════════════════════════════╗{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}║        Mossy Manager - Automatic Optimization            ║{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}║             Complete Workflow for {game.upper()}             ║{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    
+    # Initialize MO2
+    if mo2_path:
+        mo2 = MO2Integration(Path(mo2_path))
+    else:
+        click.echo(f"{Fore.CYAN}▶ Detecting Mod Organizer 2...{Style.RESET_ALL}")
+        mo2_path_detected = MO2Integration.detect_mo2_installation()
+        if mo2_path_detected:
+            click.echo(f"  {Fore.GREEN}✓ Found MO2 at: {mo2_path_detected}{Style.RESET_ALL}\n")
+            mo2 = MO2Integration(mo2_path_detected)
+        else:
+            click.echo(f"  {Fore.RED}✗ Could not detect MO2{Style.RESET_ALL}\n")
+            return
+    
+    # Check profile
+    if profile not in mo2.list_profiles():
+        click.echo(f"{Fore.RED}Error: Profile '{profile}' not found{Style.RESET_ALL}")
+        return
+    
+    # PHASE 1: Load Order Optimization
+    click.echo(f"{Fore.CYAN}═══ PHASE 1: Load Order Optimization ═══{Style.RESET_ALL}\n")
+    
+    current_loadorder = mo2.read_loadorder_txt(profile)
+    current_plugins = mo2.read_plugins_txt(profile)
+    
+    click.echo(f"Current plugins: {len(current_loadorder)}")
+    
+    # Validate
+    issues = Fallout4Rules.validate_load_order(current_loadorder)
+    if issues['errors']:
+        click.echo(f"{Fore.YELLOW}Found {len(issues['errors'])} errors{Style.RESET_ALL}")
+    if issues['warnings']:
+        click.echo(f"{Fore.YELLOW}Found {len(issues['warnings'])} warnings{Style.RESET_ALL}")
+    
+    # Optimize
+    optimized = Fallout4Rules.optimize_load_order(current_loadorder)
+    optimized_plugins = {p: current_plugins.get(p, True) for p in optimized}
+    
+    # Save
+    mo2.write_plugins_txt(profile, optimized_plugins)
+    mo2.write_loadorder_txt(profile, optimized)
+    
+    click.echo(f"{Fore.GREEN}✓ Load order optimized{Style.RESET_ALL}\n")
+    
+    # PHASE 2: Conflict Detection
+    click.echo(f"{Fore.CYAN}═══ PHASE 2: Conflict Detection ═══{Style.RESET_ALL}\n")
+    
+    if mo2.mods_path and mo2.mods_path.exists():
+        resolver = ConflictResolver(mo2.mods_path)
+        
+        # Scan mods
+        mod_count = 0
+        for mod_dir in mo2.mods_path.iterdir():
+            if mod_dir.is_dir():
+                resolver.scan_mod_files(mod_dir.name, mod_dir)
+                mod_count += 1
+        
+        click.echo(f"Scanned {mod_count} mods")
+        
+        # Generate report
+        stats = resolver.get_statistics()
+        click.echo(f"Conflicts found: {stats['total_conflicts']}")
+        click.echo(f"  Critical: {stats['critical']}")
+        click.echo(f"  High: {stats['high']}")
+        click.echo(f"  Medium: {stats['medium']}")
+        click.echo(f"  Low: {stats['low']}")
+        
+        click.echo(f"\n{Fore.GREEN}✓ Conflict detection complete{Style.RESET_ALL}\n")
+        
+        # PHASE 3: Recommendations
+        click.echo(f"{Fore.CYAN}═══ PHASE 3: Recommendations ═══{Style.RESET_ALL}\n")
+        
+        recommendations = Fallout4Rules.get_recommendations(optimized)
+        if recommendations:
+            for i, rec in enumerate(recommendations, 1):
+                click.echo(f"{i}. {rec}")
+        else:
+            click.echo(f"{Fore.GREEN}No additional recommendations{Style.RESET_ALL}")
+        
+        # Suggest patches for critical conflicts
+        if stats['critical'] > 0 or stats['high'] > 0:
+            click.echo(f"\n{Fore.YELLOW}⚠ High-priority conflicts detected{Style.RESET_ALL}")
+            click.echo(f"Consider creating patches with:")
+            click.echo(f"  mossy conflicts resolve-xedit --mods-dir \"{mo2.mods_path}\" --profile \"{profile}\"")
+    else:
+        click.echo(f"{Fore.YELLOW}⚠ Mods directory not found, skipping conflict detection{Style.RESET_ALL}\n")
+    
+    # COMPLETE
+    click.echo(f"\n{Fore.GREEN}╔═══════════════════════════════════════════════════════════╗{Style.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}║              AUTOMATIC OPTIMIZATION COMPLETE              ║{Style.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    
+    click.echo(f"{Fore.CYAN}Your game is ready!{Style.RESET_ALL}")
+    click.echo(f"Launch {game.upper()} through Mod Organizer 2 to play with your optimized setup.")
+
+
 @main.command()
 def info():
     """Display information about Mossy Manager"""
