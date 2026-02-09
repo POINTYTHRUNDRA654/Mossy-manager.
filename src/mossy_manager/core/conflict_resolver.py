@@ -309,3 +309,28 @@ class ConflictResolver:
             'mods_scanned': len(self.mod_files),
         }
         return stats
+    
+    def export_for_xedit(self) -> List[Dict[str, any]]:
+        """
+        Export conflicts in a format suitable for xEdit processing
+        
+        Returns:
+            List of conflict dictionaries formatted for xEdit
+        """
+        if not self.conflicts:
+            self.conflicts = self.detect_file_conflicts()
+        
+        exported_conflicts = []
+        
+        for conflict in self.conflicts:
+            conflict_dict = {
+                'type': conflict.conflict_type.value,
+                'resource': conflict.resource,
+                'severity': conflict.severity,
+                'mods': conflict.mods,
+                'resolution': conflict.resolution
+            }
+            exported_conflicts.append(conflict_dict)
+        
+        logger.info(f"Exported {len(exported_conflicts)} conflicts for xEdit")
+        return exported_conflicts

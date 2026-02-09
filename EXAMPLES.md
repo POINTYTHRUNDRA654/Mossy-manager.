@@ -96,7 +96,61 @@ mossy patch apply --patch-file patches/MyCompatibilityPatch.json --mod-dir demo/
 mossy patch apply --patch-file patches/MyCompatibilityPatch.json --mod-dir demo/mods/ModA
 ```
 
-## Example 4: Complete Workflow
+## Example 4: xEdit Integration for Conflict Resolution
+
+### Get xEdit help
+```bash
+mossy conflicts xedit-help
+```
+
+### Create conflicts for testing
+```bash
+mkdir -p demo/mods/WeatherMod/textures
+mkdir -p demo/mods/LightingMod/textures
+echo "weather sky" > demo/mods/WeatherMod/textures/sky.dds
+echo "lighting sky" > demo/mods/LightingMod/textures/sky.dds
+echo "plugin1" > demo/mods/WeatherMod/WeatherMod.esp
+echo "plugin2" > demo/mods/LightingMod/LightingMod.esp
+```
+
+### Resolve conflicts with xEdit (auto-launch)
+```bash
+mossy conflicts resolve-xedit \
+  --mods-dir demo/mods \
+  --xedit-path "C:/Modding/Tools/SSEEdit/SSEEdit.exe" \
+  --patch-name "Weather_Lighting_Patch" \
+  --game skyrimse \
+  --auto-launch
+```
+
+### Resolve conflicts with xEdit (manual)
+```bash
+# Generate xEdit files without launching
+mossy conflicts resolve-xedit \
+  --mods-dir demo/mods \
+  --patch-name "Weather_Lighting_Patch" \
+  --output-dir ./xedit_patches
+
+# Review generated files
+ls -l xedit_patches/
+cat xedit_patches/Weather_Lighting_Patch_conflicts.json
+
+# Then open xEdit manually and use the generated script
+```
+
+### xEdit Workflow
+1. Run `mossy conflicts resolve-xedit` to detect conflicts and generate files
+2. xEdit opens automatically (if --auto-launch is used)
+3. In xEdit:
+   - Right-click and select "Apply Script"
+   - Choose the generated `.pas` script
+   - Or manually create a new patch plugin
+   - Copy conflicting records to your patch
+   - Resolve conflicts by choosing which version to keep
+4. Save and close xEdit
+5. Add the new patch to your load order (after conflicting mods)
+
+## Example 5: Complete Workflow
 
 ### Step 1: Check current state
 ```bash
@@ -119,7 +173,16 @@ cat conflicts.txt
 mossy loadorder optimize --plugins-file plugins.txt --output new_loadorder.txt
 ```
 
-### Step 5: Create compatibility patches if needed
+### Step 5: Create conflict resolution patch with xEdit
+```bash
+mossy conflicts resolve-xedit \
+  --mods-dir /path/to/MO2/mods \
+  --xedit-path "C:/Tools/SSEEdit/SSEEdit.exe" \
+  --patch-name "ConflictResolution_Patch" \
+  --auto-launch
+```
+
+### Step 6: Manual patches if needed
 ```bash
 mossy patch create --name "ModA_ModB_Compat" --description "Compatibility between ModA and ModB"
 # Edit the patch file
@@ -133,6 +196,8 @@ mossy patch apply --patch-file patches/ModA_ModB_Compat.json --mod-dir /path/to/
 3. **Enable verbose logging** with `-v` flag for detailed information
 4. **Check validation** after optimizing load order
 5. **Review conflict reports** to understand which mods need compatibility patches
+6. **Use xEdit for complex conflicts** - It's the most powerful tool for plugin conflicts
+7. **Test in-game** after creating conflict patches to ensure everything works
 
 ## Real-World MO2 Paths
 

@@ -1,0 +1,28 @@
+{
+  "version": "1.0",
+  "tool": "Mossy Manager",
+  "conflicts": [
+    {
+      "type": "file_override",
+      "resource": "textures/sky.dds",
+      "severity": "medium",
+      "mods": [
+        "ModB",
+        "ModA"
+      ],
+      "plugins": []
+    },
+    {
+      "type": "file_override",
+      "resource": "plugin.esp",
+      "severity": "critical",
+      "mods": [
+        "ModB",
+        "ModA"
+      ],
+      "plugins": [
+        "plugin.esp"
+      ]
+    }
+  ]
+}

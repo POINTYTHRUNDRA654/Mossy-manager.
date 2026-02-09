@@ -18,12 +18,14 @@
 - **Analyze**: Identify which files are overridden and by which mods
 - **Severity Rating**: Classify conflicts by severity (Critical, High, Medium, Low)
 - **Reports**: Generate detailed conflict reports for review
+- **xEdit Integration**: Export conflicts and create resolution patches using xEdit
 
 ### 🔧 Patching System
 - **Create**: Build custom compatibility patches
 - **Apply**: Apply patches to mods with validation
 - **Dry Run**: Test patches without making changes
 - **Merge**: Combine conflicting files intelligently
+- **xEdit Support**: Generate xEdit scripts for advanced conflict resolution
 
 ## Installation
 
@@ -105,6 +107,12 @@ mossy loadorder optimize --plugins-file plugins.txt --output optimized.txt
 ```bash
 # Scan mods directory for conflicts
 mossy conflicts scan --mods-dir "path/to/mods" --output conflict_report.txt
+
+# Create conflict resolution patch using xEdit
+mossy conflicts resolve-xedit --mods-dir "path/to/mods" --xedit-path "path/to/SSEEdit.exe" --auto-launch
+
+# Get help for xEdit integration
+mossy conflicts xedit-help
 ```
 
 ### Patching Commands
@@ -194,6 +202,110 @@ JSON format for defining patch operations:
 - **High**: Scripts (.pex, .psc) - May cause gameplay issues if incompatible
 - **Medium**: Resources (textures, meshes, sounds) - Last mod in load order wins
 - **Low**: Configuration and text files - Usually safe to override
+
+## xEdit Integration
+
+Mossy Manager integrates with xEdit (SSEEdit, TES5Edit, FO4Edit, etc.) for advanced conflict resolution and patch creation.
+
+### What is xEdit?
+
+xEdit is a powerful tool for viewing and editing Bethesda game plugins. It allows you to:
+- View plugin records in detail
+- Detect conflicts between plugins
+- Create conflict resolution patches
+- Copy records between plugins
+- Clean and optimize plugins
+
+### Setting Up xEdit Integration
+
+1. **Download xEdit** for your game from [Nexus Mods](https://www.nexusmods.com/):
+   - Skyrim Special Edition: SSEEdit
+   - Skyrim: TES5Edit
+   - Fallout 4: FO4Edit
+   - Fallout 3: FO3Edit
+   - Fallout New Vegas: FNVEdit
+
+2. **Extract** xEdit to a known location (e.g., `C:\Modding\Tools\SSEEdit\`)
+
+3. **Get help** with configuration:
+   ```bash
+   mossy conflicts xedit-help
+   ```
+
+### Using xEdit for Conflict Resolution
+
+#### Automatic Workflow
+
+```bash
+# Scan conflicts and launch xEdit automatically
+mossy conflicts resolve-xedit \
+  --mods-dir "C:\Modding\ModOrganizer2\mods" \
+  --xedit-path "C:\Modding\Tools\SSEEdit\SSEEdit.exe" \
+  --patch-name "MyConflictPatch" \
+  --auto-launch
+```
+
+This will:
+1. Scan all mods for conflicts
+2. Export conflicts to JSON format
+3. Generate an xEdit Pascal script
+4. Launch xEdit with the conflicting plugins
+5. Provide instructions for creating the patch
+
+#### Manual Workflow
+
+```bash
+# Export conflicts without launching xEdit
+mossy conflicts resolve-xedit \
+  --mods-dir "C:\Modding\ModOrganizer2\mods" \
+  --patch-name "MyConflictPatch" \
+  --output-dir "./xedit_output"
+```
+
+Then:
+1. Open the generated `xedit_output/MyConflictPatch_conflicts.json` to review conflicts
+2. Launch xEdit manually
+3. Load conflicting plugins
+4. Use xEdit's built-in conflict detection
+5. Create a new patch plugin
+6. Copy conflicting records to your patch
+7. Resolve conflicts manually
+8. Save and exit xEdit
+
+### Generated Files
+
+When using xEdit integration, Mossy Manager creates:
+
+- **`{PatchName}_conflicts.json`** - Detailed conflict information
+- **`{PatchName}_script.pas`** - Pascal script for xEdit to automate patch creation
+
+### Example xEdit Workflow
+
+```bash
+# Step 1: Detect conflicts
+mossy conflicts scan --mods-dir "C:\Modding\MO2\mods" --output conflicts.txt
+
+# Step 2: Review the conflict report
+cat conflicts.txt
+
+# Step 3: Create conflict resolution patch with xEdit
+mossy conflicts resolve-xedit \
+  --mods-dir "C:\Modding\MO2\mods" \
+  --xedit-path "C:\Tools\SSEEdit\SSEEdit.exe" \
+  --patch-name "ConflictResolution_Patch" \
+  --game skyrimse \
+  --auto-launch
+
+# Step 4: In xEdit (automatically opened):
+#   - Review detected conflicts
+#   - Create new patch plugin
+#   - Copy conflicting records
+#   - Resolve conflicts
+#   - Save and close
+
+# Step 5: Add the patch to your load order
+# Place it after all conflicting mods in your load order
+```
 
 ## Examples
 

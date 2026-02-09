@@ -14,6 +14,7 @@ from tabulate import tabulate
 from mossy_manager.core.load_order import LoadOrderManager
 from mossy_manager.core.conflict_resolver import ConflictResolver
 from mossy_manager.core.patcher import Patcher
+from mossy_manager.utils.xedit_integration import XEditIntegration
 
 # Initialize colorama for cross-platform colored output
 init(autoreset=True)
@@ -193,6 +194,135 @@ def scan_conflicts(mods_dir, output):
     click.echo(f"High: {Fore.YELLOW}{stats['high']}{Style.RESET_ALL}")
     click.echo(f"Medium: {stats['medium']}")
     click.echo(f"Low: {stats['low']}")
+
+
+@conflicts.command('resolve-xedit')
+@click.option('--mods-dir', '-m', type=click.Path(exists=True),
+              required=True, help='Path to MO2 mods directory')
+@click.option('--xedit-path', '-x', type=click.Path(exists=True),
+              help='Path to xEdit executable (SSEEdit.exe, TES5Edit.exe, etc.)')
+@click.option('--game', '-g', default='skyrimse',
+              help='Game type (skyrimse, skyrim, fallout4, etc.)')
+@click.option('--patch-name', '-p', default='MossyManager_ConflictPatch',
+              help='Name for the conflict resolution patch')
+@click.option('--output-dir', '-o', type=click.Path(),
+              default='./xedit_output', help='Output directory for xEdit files')
+@click.option('--auto-launch', is_flag=True, default=False,
+              help='Automatically launch xEdit after export')
+def resolve_xedit(mods_dir, xedit_path, game, patch_name, output_dir, auto_launch):
+    """
+    Create conflict resolution patch using xEdit
+    
+    This command scans for conflicts, exports them to xEdit format,
+    generates a helper script, and optionally launches xEdit for
+    interactive conflict resolution.
+    """
+    click.echo(f"{Fore.CYAN}╔═══════════════════════════════════════════════════════════╗{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}║     xEdit Conflict Resolution - Mossy Manager            ║{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    
+    # Initialize conflict resolver
+    resolver = ConflictResolver(Path(mods_dir))
+    
+    # Scan mods for conflicts
+    click.echo(f"{Fore.CYAN}Step 1: Scanning mods for conflicts...{Style.RESET_ALL}")
+    mods_path = Path(mods_dir)
+    
+    if not mods_path.exists():
+        click.echo(f"{Fore.RED}Error: Mods directory not found: {mods_dir}{Style.RESET_ALL}")
+        return
+    
+    mod_count = 0
+    for mod_dir in mods_path.iterdir():
+        if mod_dir.is_dir():
+            resolver.scan_mod_files(mod_dir.name, mod_dir)
+            mod_count += 1
+    
+    click.echo(f"  Scanned {mod_count} mods")
+    
+    # Detect conflicts
+    conflicts = resolver.export_for_xedit()
+    
+    if not conflicts:
+        click.echo(f"\n{Fore.GREEN}✓ No conflicts detected! No patch needed.{Style.RESET_ALL}")
+        return
+    
+    click.echo(f"  Found {len(conflicts)} conflicts")
+    
+    # Display conflict summary
+    stats = resolver.get_statistics()
+    click.echo(f"\n{Fore.CYAN}Conflict Summary:{Style.RESET_ALL}")
+    click.echo(f"  Critical: {Fore.RED}{stats['critical']}{Style.RESET_ALL}")
+    click.echo(f"  High:     {Fore.YELLOW}{stats['high']}{Style.RESET_ALL}")
+    click.echo(f"  Medium:   {stats['medium']}")
+    click.echo(f"  Low:      {stats['low']}")
+    
+    # Initialize xEdit integration
+    xedit = XEditIntegration(
+        xedit_path=Path(xedit_path) if xedit_path else None,
+        game_data_path=None
+    )
+    
+    # Auto-detect xEdit if not provided
+    if not xedit_path:
+        click.echo(f"\n{Fore.CYAN}Step 2: Detecting xEdit installation...{Style.RESET_ALL}")
+        detected_path = xedit.detect_xedit(game)
+        if detected_path:
+            xedit.xedit_path = detected_path
+            click.echo(f"  {Fore.GREEN}✓ Found xEdit: {detected_path}{Style.RESET_ALL}")
+        else:
+            click.echo(f"  {Fore.YELLOW}⚠ xEdit not auto-detected{Style.RESET_ALL}")
+            click.echo(f"  Please specify --xedit-path manually")
+            if not auto_launch:
+                click.echo(f"  Continuing without auto-launch...")
+    
+    # Create conflict resolution patch
+    click.echo(f"\n{Fore.CYAN}Step 3: Generating xEdit files...{Style.RESET_ALL}")
+    output_path = Path(output_dir)
+    
+    result = xedit.create_conflict_resolution_patch(
+        conflicts=conflicts,
+        patch_name=patch_name,
+        output_dir=output_path
+    )
+    
+    if result['success']:
+        click.echo(f"  {Fore.GREEN}✓ Conflicts exported to: {result['export_path']}{Style.RESET_ALL}")
+        click.echo(f"  {Fore.GREEN}✓ xEdit script generated: {result['script_path']}{Style.RESET_ALL}")
+        
+        if result['xedit_launched']:
+            click.echo(f"\n{Fore.GREEN}✓ xEdit launched successfully!{Style.RESET_ALL}")
+            click.echo(f"\n{Fore.CYAN}Next Steps:{Style.RESET_ALL}")
+            click.echo(f"  1. In xEdit, review the conflicts")
+            click.echo(f"  2. Use xEdit's conflict detection features")
+            click.echo(f"  3. Create a new patch plugin ('{patch_name}.esp')")
+            click.echo(f"  4. Copy conflicting records to your patch")
+            click.echo(f"  5. Resolve conflicts manually")
+            click.echo(f"  6. Save and close xEdit")
+            click.echo(f"  7. Add the patch to your load order")
+        else:
+            if xedit.xedit_path:
+                click.echo(f"\n{Fore.YELLOW}⚠ xEdit not launched (auto-launch disabled){Style.RESET_ALL}")
+            else:
+                click.echo(f"\n{Fore.YELLOW}⚠ xEdit path not configured{Style.RESET_ALL}")
+            
+            click.echo(f"\n{Fore.CYAN}Manual Launch:{Style.RESET_ALL}")
+            click.echo(f"  1. Open xEdit manually")
+            click.echo(f"  2. Load the conflicting plugins")
+            click.echo(f"  3. Use the generated script: {result['script_path']}")
+            click.echo(f"  4. Follow xEdit's conflict resolution workflow")
+    else:
+        click.echo(f"\n{Fore.RED}✗ Error creating xEdit files{Style.RESET_ALL}")
+        if 'error' in result:
+            click.echo(f"  Error: {result['error']}")
+
+
+@conflicts.command('xedit-help')
+def xedit_help():
+    """Display help for xEdit integration"""
+    xedit = XEditIntegration()
+    help_text = xedit.get_configuration_help()
+    click.echo(help_text)
 
 
 @main.group()
