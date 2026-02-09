@@ -31,7 +31,7 @@ Mossy Manager is a user-friendly application designed to help manage your Mod Or
 1. Clone the repository:
    ```bash
    git clone https://github.com/POINTYTHRUNDRA654/Mossy-manager.git
-   cd Mossy-manager.
+   cd Mossy-manager
    ```
 
 2. Install dependencies (optional, only needed for building):
@@ -104,7 +104,7 @@ pyinstaller --onefile --windowed --name MossyManager mossy_manager.py
 ## File Structure
 
 ```
-Mossy-manager./
+Mossy-manager/
 ├── mossy_manager.py      # Main application source code
 ├── mossy_manager.spec    # PyInstaller specification file
 ├── requirements.txt      # Python dependencies

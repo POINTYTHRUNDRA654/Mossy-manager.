@@ -7,6 +7,9 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
 import sys
+import json
+import subprocess
+import platform
 from pathlib import Path
 
 
@@ -15,6 +18,13 @@ class MossyManagerApp:
         self.root = root
         self.root.title("Mossy Manager - MO2 Manager")
         self.root.geometry("800x600")
+        
+        # Settings file path
+        self.config_file = Path.home() / ".mossy_manager" / "config.json"
+        self.config_file.parent.mkdir(exist_ok=True)
+        
+        # Load settings
+        self.load_settings()
         
         # Configure the main window
         self.setup_ui()
@@ -68,7 +78,7 @@ class MossyManagerApp:
         path_frame.columnconfigure(1, weight=1)
         
         ttk.Label(path_frame, text="MO2 Path:").grid(row=0, column=0, sticky=tk.W)
-        self.mo2_path_var = tk.StringVar()
+        self.mo2_path_var = tk.StringVar(value=self.settings.get('mo2_path', ''))
         self.mo2_path_entry = ttk.Entry(path_frame, textvariable=self.mo2_path_var)
         self.mo2_path_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
         
@@ -127,7 +137,7 @@ class MossyManagerApp:
         ).grid(row=0, column=0, pady=10)
         
         # Auto-launch option
-        self.auto_launch_var = tk.BooleanVar()
+        self.auto_launch_var = tk.BooleanVar(value=self.settings.get('auto_launch', False))
         auto_launch_check = ttk.Checkbutton(
             settings_frame,
             text="Auto-launch MO2 on startup",
@@ -140,7 +150,7 @@ class MossyManagerApp:
         theme_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=5)
         
         ttk.Label(theme_frame, text="Theme:").grid(row=0, column=0, sticky=tk.W)
-        self.theme_var = tk.StringVar(value="Light")
+        self.theme_var = tk.StringVar(value=self.settings.get('theme', 'Light'))
         theme_combo = ttk.Combobox(
             theme_frame,
             textvariable=self.theme_var,
@@ -208,6 +218,8 @@ class MossyManagerApp:
         )
         if directory:
             self.mo2_path_var.set(directory)
+            self.settings['mo2_path'] = directory
+            self.save_settings_to_file()
             self.update_status(f"MO2 path set to: {directory}")
             self.refresh_mods()
             
@@ -235,7 +247,7 @@ class MossyManagerApp:
             )
             
     def launch_mo2(self):
-        """Launch Mod Organizer 2"""
+        """Launch Mod Organizer 2 (cross-platform)"""
         mo2_path = self.mo2_path_var.get()
         
         if not mo2_path:
@@ -249,7 +261,13 @@ class MossyManagerApp:
         
         if mo2_exe.exists():
             try:
-                os.startfile(str(mo2_exe))
+                system = platform.system()
+                if system == 'Windows':
+                    os.startfile(str(mo2_exe))
+                elif system == 'Darwin':  # macOS
+                    subprocess.Popen(['open', str(mo2_exe)])
+                else:  # Linux and others
+                    subprocess.Popen(['xdg-open', str(mo2_exe)])
                 self.update_status("Launching Mod Organizer 2...")
             except Exception as e:
                 messagebox.showerror(
@@ -264,11 +282,48 @@ class MossyManagerApp:
             
     def save_settings(self):
         """Save application settings"""
-        messagebox.showinfo(
-            "Settings Saved",
-            "Your settings have been saved successfully!"
-        )
-        self.update_status("Settings saved")
+        # Update settings from UI
+        self.settings['auto_launch'] = self.auto_launch_var.get()
+        self.settings['theme'] = self.theme_var.get()
+        
+        # Save to file
+        if self.save_settings_to_file():
+            messagebox.showinfo(
+                "Settings Saved",
+                "Your settings have been saved successfully!"
+            )
+            self.update_status("Settings saved")
+        else:
+            messagebox.showerror(
+                "Save Error",
+                "Failed to save settings. Check file permissions."
+            )
+    
+    def load_settings(self):
+        """Load settings from file"""
+        self.settings = {
+            'mo2_path': '',
+            'auto_launch': False,
+            'theme': 'Light'
+        }
+        
+        if self.config_file.exists():
+            try:
+                with open(self.config_file, 'r') as f:
+                    saved_settings = json.load(f)
+                    self.settings.update(saved_settings)
+            except Exception as e:
+                print(f"Error loading settings: {e}")
+    
+    def save_settings_to_file(self):
+        """Save settings to file"""
+        try:
+            with open(self.config_file, 'w') as f:
+                json.dump(self.settings, f, indent=2)
+            return True
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+            return False
         
     def update_status(self, message):
         """Update the status bar"""
