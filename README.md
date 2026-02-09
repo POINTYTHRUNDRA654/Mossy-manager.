@@ -121,6 +121,12 @@ mossy conflicts xedit-help
 # Create a new patch
 mossy patch create --name "PatchName" --description "What this patch does"
 
+# Create a patch with xEdit integration
+mossy patch create-xedit --name "MyPatch" --description "Patch for xEdit" --auto-launch
+
+# Export existing patch to xEdit format
+mossy patch export-xedit --patch-file "patch.json" --output-dir "./xedit_patches"
+
 # List all available patches
 mossy patch list --patches-dir "./patches"
 
@@ -306,6 +312,50 @@ mossy conflicts resolve-xedit \
 # Step 5: Add the patch to your load order
 # Place it after all conflicting mods in your load order
 ```
+
+### Creating Patches with xEdit
+
+Beyond conflict resolution, you can also create general-purpose patches using xEdit:
+
+#### Workflow 1: Create New Patch with xEdit
+
+```bash
+# Create a new patch that will be edited in xEdit
+mossy patch create-xedit \
+  --name "MyGameplayPatch" \
+  --description "Custom gameplay modifications" \
+  --xedit-path "C:\Tools\SSEEdit\SSEEdit.exe" \
+  --target-plugin "MyGameplayPatch.esp" \
+  --auto-launch
+```
+
+This will:
+1. Create a Mossy Manager patch file
+2. Generate xEdit-compatible JSON export
+3. Create a Pascal script for xEdit
+4. Launch xEdit with the new plugin
+5. You can then edit records in xEdit
+6. Save and use the patch in your load order
+
+#### Workflow 2: Export Existing Patch to xEdit
+
+```bash
+# If you have an existing Mossy Manager patch
+mossy patch export-xedit \
+  --patch-file "patches/MyPatch.json" \
+  --xedit-path "C:\Tools\SSEEdit\SSEEdit.exe" \
+  --target-plugin "MyPatch.esp" \
+  --output-dir "./xedit_patches"
+```
+
+This exports the patch operations and generates xEdit scripts for further editing.
+
+#### Generated Files
+
+When creating patches with xEdit, Mossy Manager generates:
+- **`{PatchName}_patch.json`** - Structured patch data with operations
+- **`{PatchName}_apply.pas`** - Pascal script for xEdit to apply the patch
+- **Mossy Manager patch file** - Standard JSON patch file
 
 ## Examples
 

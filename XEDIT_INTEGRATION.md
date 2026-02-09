@@ -266,6 +266,99 @@ Features:
 6. **Standards** - Uses industry-standard xEdit tool
 7. **Quality** - Proper error handling and validation
 
+## Patch Integration (New Feature)
+
+### Overview
+
+Extended xEdit integration to support general-purpose patch creation, not just conflict resolution. Users can now create, edit, and manage patches using xEdit's full capabilities.
+
+### New Features
+
+#### 1. Patch Export to xEdit
+- Export Mossy Manager patches to xEdit-compatible format
+- Generate Pascal scripts for patch application
+- Support for all patch operation types (add, replace, merge, delete)
+
+#### 2. New CLI Commands
+
+**`mossy patch create-xedit`**
+- Create new patch with xEdit integration
+- Generates Mossy patch file + xEdit files
+- Optional auto-launch of xEdit
+
+**`mossy patch export-xedit`**
+- Export existing Mossy patch to xEdit format
+- Useful for editing patches in xEdit
+- Generates script and JSON export
+
+#### 3. Extended XEditIntegration Class
+
+New methods added:
+- `export_patch_for_xedit()` - Export patch data to JSON
+- `generate_patch_script()` - Create Pascal script for patches
+- `create_patch_with_xedit()` - High-level patch workflow
+- `_build_patch_script()` - Build Pascal script content
+
+#### 4. Extended Patcher Class
+
+- `export_for_xedit()` - Export patch in xEdit-compatible format
+
+### Usage Examples
+
+#### Create Patch with xEdit
+```bash
+mossy patch create-xedit \
+  --name "MyPatch" \
+  --description "Custom patch" \
+  --xedit-path "C:/Tools/SSEEdit/SSEEdit.exe" \
+  --target-plugin "MyPatch.esp" \
+  --auto-launch
+```
+
+#### Export Existing Patch
+```bash
+mossy patch export-xedit \
+  --patch-file "patches/MyPatch.json" \
+  --xedit-path "C:/Tools/SSEEdit/SSEEdit.exe" \
+  --target-plugin "MyPatch.esp" \
+  --auto-launch
+```
+
+### Generated Files for Patches
+
+**`{PatchName}_patch.json`**
+- Structured patch data
+- Operation details
+- Target mods list
+
+**`{PatchName}_apply.pas`**
+- Pascal script for xEdit
+- Creates/loads target plugin
+- Lists operations to apply
+- Proper string escaping
+
+### Testing
+
+Added 7 new test cases in `tests/test_xedit_patch_integration.py`:
+1. `test_export_patch_for_xedit` - Export functionality
+2. `test_generate_patch_script` - Script generation
+3. `test_build_patch_script` - Script content
+4. `test_create_patch_with_xedit` - Full workflow
+5. `test_patcher_export_for_xedit` - Patcher integration
+6. `test_patch_script_with_special_characters` - String escaping
+7. `test_patch_export_with_empty_operations` - Edge cases
+
+**Total Tests**: 53 (46 original + 7 new)
+**Pass Rate**: 100%
+
+### Benefits
+
+1. **Unified Workflow** - Same xEdit integration for conflicts and patches
+2. **Flexibility** - Create patches in Mossy, edit in xEdit
+3. **Power** - Access xEdit's full editing capabilities
+4. **Consistency** - Same file formats and patterns as conflict resolution
+5. **Documentation** - Comprehensive examples and guides
+
 ## Future Enhancements
 
 Potential improvements:

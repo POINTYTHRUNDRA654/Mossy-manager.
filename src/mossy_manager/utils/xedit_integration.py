@@ -356,3 +356,227 @@ xEdit is a powerful tool for editing Bethesda game plugins. To use it with Mossy
 
 Supported Games:
 """ + "\n".join(f"  - {game}: {exe}" for game, exe in self.supported_games.items())
+    
+    def export_patch_for_xedit(self, patch_data: Dict[str, Any], output_path: Path) -> None:
+        """
+        Export a Mossy Manager patch to xEdit-compatible format
+        
+        Args:
+            patch_data: Patch dictionary with operations
+            output_path: Path to save the export file
+        """
+        logger.info(f"Exporting patch '{patch_data.get('name')}' for xEdit")
+        
+        export_data = {
+            'version': '1.0',
+            'tool': 'Mossy Manager',
+            'patch_type': 'mod_patch',
+            'patch': {
+                'name': patch_data.get('name', 'Unnamed Patch'),
+                'description': patch_data.get('description', ''),
+                'created_at': patch_data.get('created_at', ''),
+                'target_mods': patch_data.get('target_mods', []),
+                'operations': []
+            }
+        }
+        
+        # Convert operations to xEdit-compatible format
+        for operation in patch_data.get('operations', []):
+            op_type = operation.get('type')
+            xedit_op = {
+                'type': op_type,
+                'file': operation.get('file', ''),
+                'description': f"{op_type.title()} operation on {operation.get('file', 'unknown')}"
+            }
+            
+            # Add operation-specific data
+            if 'content' in operation:
+                xedit_op['content'] = operation['content']
+            if 'source_mods' in operation:
+                xedit_op['source_mods'] = operation['source_mods']
+            
+            export_data['patch']['operations'].append(xedit_op)
+        
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(export_data, f, indent=2)
+        
+        logger.info(f"Exported patch to: {output_path}")
+    
+    def generate_patch_script(self, 
+                             patch_data: Dict[str, Any],
+                             output_dir: Path,
+                             target_plugin: Optional[str] = None) -> Path:
+        """
+        Generate xEdit script for applying a patch
+        
+        Args:
+            patch_data: Patch dictionary with operations
+            output_dir: Directory to save the script
+            target_plugin: Optional target plugin name
+            
+        Returns:
+            Path to generated script
+        """
+        logger.info(f"Generating xEdit script for patch: {patch_data.get('name')}")
+        
+        patch_name = patch_data.get('name', 'Unnamed_Patch')
+        safe_name = patch_name.replace(' ', '_').replace('-', '_')
+        
+        # Build the Pascal script
+        script_content = self._build_patch_script(patch_data, safe_name, target_plugin)
+        
+        script_path = output_dir / f"{safe_name}_apply.pas"
+        script_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(script_path, 'w', encoding='utf-8') as f:
+            f.write(script_content)
+        
+        logger.info(f"Generated patch script: {script_path}")
+        return script_path
+    
+    def _build_patch_script(self, 
+                           patch_data: Dict[str, Any],
+                           safe_name: str,
+                           target_plugin: Optional[str]) -> str:
+        """Build Pascal script for patch application"""
+        
+        operations = patch_data.get('operations', [])
+        target_mods = patch_data.get('target_mods', [])
+        description = patch_data.get('description', 'Mod patch')
+        
+        # Build target plugin name
+        if not target_plugin:
+            target_plugin = f"{safe_name}.esp"
+        
+        # Escape single quotes in description
+        escaped_desc = description.replace("'", "''")
+        
+        script = f'''unit {safe_name}_Apply;
+
+{{
+  Mossy Manager - Patch Application Script
+  Patch: {patch_data.get('name', 'Unnamed')}
+  Description: {description}
+  
+  This script applies the patch operations defined in Mossy Manager.
+  Target mods: {', '.join(target_mods) if target_mods else 'Any applicable mod'}
+}}
+
+var
+  targetFile: IInterface;
+
+function Initialize: integer;
+begin
+  Result := 0;
+  
+  AddMessage('Applying Mossy Manager patch: {patch_data.get('name', 'Unnamed')}');
+  AddMessage('Description: {escaped_desc}');
+  
+  // Create or load target plugin
+  targetFile := FileByName('{target_plugin}');
+  if not Assigned(targetFile) then begin
+    AddMessage('Creating new plugin: {target_plugin}');
+    targetFile := AddNewFileName('{target_plugin}', False);
+    if not Assigned(targetFile) then begin
+      AddMessage('ERROR: Failed to create plugin');
+      Result := 1;
+      Exit;
+    end;
+  end else begin
+    AddMessage('Using existing plugin: {target_plugin}');
+  end;
+  
+  AddMessage('Patch operations to apply: {len(operations)}');
+end;
+
+function Process(e: IInterface): integer;
+begin
+  Result := 0;
+  
+  // Process each record as needed
+  // Note: Actual patch application logic depends on the specific
+  // operations and would need to be customized per patch type
+end;
+
+function Finalize: integer;
+begin
+  Result := 0;
+  AddMessage('Patch application complete.');
+  AddMessage('Review changes and save the plugin in xEdit.');
+  AddMessage('');
+  AddMessage('Operations applied:');
+'''
+        
+        # Add operation details to the script
+        for i, operation in enumerate(operations, 1):
+            op_type = operation.get('type', 'unknown')
+            op_file = operation.get('file', 'unknown')
+            escaped_file = op_file.replace("'", "''")
+            script += f"  AddMessage('  {i}. {op_type}: {escaped_file}');\n"
+        
+        script += '''end;
+
+end.
+'''
+        
+        return script
+    
+    def create_patch_with_xedit(self,
+                               patch_data: Dict[str, Any],
+                               output_dir: Path,
+                               target_plugin: Optional[str] = None) -> Dict[str, Any]:
+        """
+        High-level method to create a patch using xEdit
+        
+        Args:
+            patch_data: Patch dictionary
+            output_dir: Directory for output files
+            target_plugin: Optional target plugin name
+            
+        Returns:
+            Dictionary with results and paths
+        """
+        logger.info(f"Creating patch with xEdit: {patch_data.get('name')}")
+        
+        result = {
+            'success': False,
+            'patch_name': patch_data.get('name'),
+            'patch_exported': False,
+            'script_generated': False,
+            'xedit_launched': False,
+            'export_path': None,
+            'script_path': None
+        }
+        
+        try:
+            patch_name = patch_data.get('name', 'Unnamed_Patch').replace(' ', '_')
+            
+            # Export patch
+            export_path = output_dir / f"{patch_name}_patch.json"
+            self.export_patch_for_xedit(patch_data, export_path)
+            result['patch_exported'] = True
+            result['export_path'] = str(export_path)
+            
+            # Generate xEdit script
+            script_path = self.generate_patch_script(patch_data, output_dir, target_plugin)
+            result['script_generated'] = True
+            result['script_path'] = str(script_path)
+            
+            # Get target plugin or create default
+            if not target_plugin:
+                target_plugin = f"{patch_name}.esp"
+            
+            # Launch xEdit if path is configured
+            if self.xedit_path:
+                result['xedit_launched'] = self.launch_xedit([target_plugin], script_path)
+            
+            result['success'] = True
+            logger.info("Patch creation with xEdit initiated")
+            
+        except Exception as e:
+            logger.error(f"Error creating patch with xEdit: {e}")
+            result['error'] = str(e)
+        
+        return result

@@ -366,3 +366,17 @@ class Patcher:
             'saved_patches': len(list(self.patches_dir.glob("*.json")))
         }
         return stats
+    
+    def export_for_xedit(self, patch: Patch) -> Dict[str, Any]:
+        """
+        Export a patch in xEdit-compatible format
+        
+        Args:
+            patch: Patch object to export
+            
+        Returns:
+            Dictionary formatted for xEdit integration
+        """
+        logger.info(f"Exporting patch '{patch.name}' for xEdit")
+        
+        return patch.to_dict()

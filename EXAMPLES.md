@@ -150,7 +150,71 @@ cat xedit_patches/Weather_Lighting_Patch_conflicts.json
 4. Save and close xEdit
 5. Add the new patch to your load order (after conflicting mods)
 
-## Example 5: Complete Workflow
+## Example 5: Creating Patches with xEdit
+
+### Create a new patch with xEdit integration
+```bash
+mossy patch create-xedit \
+  --name "MyGameplayPatch" \
+  --description "Custom gameplay balance changes" \
+  --target-plugin "MyGameplayPatch.esp" \
+  --output-dir ./xedit_patches
+```
+
+This will:
+- Create a Mossy Manager patch
+- Generate xEdit-compatible files
+- Prepare a script for xEdit
+
+### Export existing patch to xEdit
+```bash
+# First create a regular patch
+mossy patch create --name "WeaponBalance" --description "Weapon damage adjustments"
+
+# Add operations manually by editing patches/WeaponBalance.json
+# Then export to xEdit format
+mossy patch export-xedit \
+  --patch-file patches/WeaponBalance.json \
+  --target-plugin "WeaponBalance.esp" \
+  --output-dir ./xedit_patches
+```
+
+### Using the generated files in xEdit
+1. Open xEdit (SSEEdit, TES5Edit, etc.)
+2. Right-click on the left panel
+3. Select "Apply Script"
+4. Choose the generated `_apply.pas` script
+5. The script will create/load the target plugin
+6. Add your modifications to the plugin
+7. Save and close xEdit
+8. Add the plugin to your load order
+
+### Example: Complete patch workflow
+```bash
+# Step 1: Create patch with xEdit
+mossy patch create-xedit \
+  --name "CombatOverhaul" \
+  --description "Comprehensive combat changes" \
+  --xedit-path "C:/Tools/SSEEdit/SSEEdit.exe" \
+  --game skyrimse \
+  --auto-launch
+
+# Step 2: (xEdit opens automatically)
+# - Edit records as needed
+# - Make your changes
+# - Save and close
+
+# Step 3: Test the patch in-game
+# Add CombatOverhaul.esp to your load order
+
+# Step 4: If needed, export again for further editing
+mossy patch export-xedit \
+  --patch-file patches/CombatOverhaul.json \
+  --xedit-path "C:/Tools/SSEEdit/SSEEdit.exe" \
+  --auto-launch
+```
+
+## Example 6: Complete Workflow
 
 ### Step 1: Check current state
 ```bash

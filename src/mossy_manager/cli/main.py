@@ -419,6 +419,153 @@ def apply_patch(patch_file, mod_dir, dry_run):
                 click.echo(f"  • {error}")
 
 
+@patch.command('create-xedit')
+@click.option('--name', '-n', required=True, help='Patch name')
+@click.option('--description', '-d', default='', help='Patch description')
+@click.option('--xedit-path', '-x', type=click.Path(exists=True),
+              help='Path to xEdit executable')
+@click.option('--game', '-g', default='skyrimse',
+              help='Game type (skyrimse, fallout4, etc.)')
+@click.option('--target-plugin', '-t',
+              help='Target plugin name (e.g., MyPatch.esp)')
+@click.option('--output-dir', '-o', type=click.Path(),
+              default='./xedit_patches', help='Output directory for xEdit files')
+@click.option('--auto-launch', is_flag=True,
+              help='Automatically launch xEdit')
+def create_patch_xedit(name, description, xedit_path, game, target_plugin, 
+                      output_dir, auto_launch):
+    """
+    Create a patch that can be edited in xEdit
+    
+    This creates a new patch in Mossy Manager format and generates
+    xEdit-compatible files for editing in xEdit.
+    """
+    click.echo(f"{Fore.CYAN}╔═══════════════════════════════════════════════════════════╗{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}║        Create Patch with xEdit - Mossy Manager           ║{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    
+    # Create patch in Mossy Manager
+    click.echo(f"{Fore.CYAN}Step 1: Creating patch in Mossy Manager...{Style.RESET_ALL}")
+    patcher = Patcher()
+    patch = patcher.create_patch(name, description)
+    
+    # Add placeholder operation
+    patch.add_operation('merge', 
+                       file='Data/example.ini',
+                       content='# Patch content - edit in xEdit')
+    
+    # Save the patch
+    patch_file = patcher.save_patch(patch)
+    click.echo(f"  ✓ Created patch: {name}")
+    click.echo(f"  ✓ Saved to: {patch_file}")
+    
+    # Initialize xEdit integration
+    click.echo(f"\n{Fore.CYAN}Step 2: Preparing xEdit files...{Style.RESET_ALL}")
+    xedit = XEditIntegration(
+        xedit_path=Path(xedit_path) if xedit_path else None
+    )
+    
+    # Auto-detect xEdit if not provided
+    if not xedit_path and auto_launch:
+        click.echo(f"  Detecting xEdit installation...")
+        detected_path = xedit.detect_xedit(game)
+        if detected_path:
+            xedit.xedit_path = detected_path
+            click.echo(f"  {Fore.GREEN}✓ Found xEdit: {detected_path}{Style.RESET_ALL}")
+        else:
+            click.echo(f"  {Fore.YELLOW}⚠ xEdit not auto-detected{Style.RESET_ALL}")
+    
+    # Export patch for xEdit
+    output_path = Path(output_dir)
+    patch_data = patcher.export_for_xedit(patch)
+    
+    result = xedit.create_patch_with_xedit(
+        patch_data=patch_data,
+        output_dir=output_path,
+        target_plugin=target_plugin
+    )
+    
+    if result['success']:
+        click.echo(f"  {Fore.GREEN}✓ Patch exported: {result['export_path']}{Style.RESET_ALL}")
+        click.echo(f"  {Fore.GREEN}✓ Script generated: {result['script_path']}{Style.RESET_ALL}")
+        
+        if result['xedit_launched']:
+            click.echo(f"\n{Fore.GREEN}✓ xEdit launched successfully!{Style.RESET_ALL}")
+            click.echo(f"\n{Fore.CYAN}Next Steps:{Style.RESET_ALL}")
+            click.echo(f"  1. In xEdit, the script will create/load the target plugin")
+            click.echo(f"  2. Add your patch modifications")
+            click.echo(f"  3. Save and close xEdit")
+            click.echo(f"  4. The patch is ready to use in your load order")
+        else:
+            click.echo(f"\n{Fore.CYAN}Manual Steps:{Style.RESET_ALL}")
+            click.echo(f"  1. Open xEdit manually")
+            click.echo(f"  2. Run the generated script: {result['script_path']}")
+            click.echo(f"  3. Make your patch modifications")
+            click.echo(f"  4. Save and close xEdit")
+    else:
+        click.echo(f"\n{Fore.RED}✗ Error creating xEdit files{Style.RESET_ALL}")
+        if 'error' in result:
+            click.echo(f"  Error: {result['error']}")
+
+
+@patch.command('export-xedit')
+@click.option('--patch-file', '-p', type=click.Path(exists=True),
+              required=True, help='Path to patch file')
+@click.option('--xedit-path', '-x', type=click.Path(exists=True),
+              help='Path to xEdit executable')
+@click.option('--target-plugin', '-t',
+              help='Target plugin name (e.g., MyPatch.esp)')
+@click.option('--output-dir', '-o', type=click.Path(),
+              default='./xedit_patches', help='Output directory')
+@click.option('--auto-launch', is_flag=True,
+              help='Automatically launch xEdit')
+def export_patch_xedit(patch_file, xedit_path, target_plugin, output_dir, auto_launch):
+    """
+    Export existing patch to xEdit format
+    
+    Takes an existing Mossy Manager patch and exports it in a format
+    that can be edited in xEdit.
+    """
+    click.echo(f"{Fore.CYAN}Exporting patch to xEdit format...{Style.RESET_ALL}\n")
+    
+    # Load the patch
+    patcher = Patcher()
+    patch = patcher.load_patch(Path(patch_file))
+    
+    click.echo(f"Patch: {patch.name}")
+    click.echo(f"Operations: {len(patch.operations)}")
+    
+    # Initialize xEdit integration
+    xedit = XEditIntegration(
+        xedit_path=Path(xedit_path) if xedit_path else None
+    )
+    
+    # Export patch
+    output_path = Path(output_dir)
+    patch_data = patcher.export_for_xedit(patch)
+    
+    result = xedit.create_patch_with_xedit(
+        patch_data=patch_data,
+        output_dir=output_path,
+        target_plugin=target_plugin
+    )
+    
+    if result['success']:
+        click.echo(f"\n{Fore.GREEN}✓ Export successful!{Style.RESET_ALL}")
+        click.echo(f"Patch data: {result['export_path']}")
+        click.echo(f"xEdit script: {result['script_path']}")
+        
+        if result['xedit_launched']:
+            click.echo(f"\n{Fore.GREEN}✓ xEdit launched{Style.RESET_ALL}")
+        elif auto_launch:
+            click.echo(f"\n{Fore.YELLOW}⚠ xEdit not launched (path not configured){Style.RESET_ALL}")
+            click.echo(f"Specify --xedit-path to enable auto-launch")
+    else:
+        click.echo(f"\n{Fore.RED}✗ Export failed{Style.RESET_ALL}")
+        if 'error' in result:
+            click.echo(f"Error: {result['error']}")
+
+
 @main.command()
 def info():
     """Display information about Mossy Manager"""
