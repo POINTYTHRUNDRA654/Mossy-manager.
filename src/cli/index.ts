@@ -26,6 +26,15 @@ program
   .description('Mossy Manager - Advanced mod merging tool for Bethesda games')
   .version('1.0.0');
 
+// Helper function to get color for archive type
+function getArchiveTypeColor(type: string): typeof chalk.blue {
+  const colorMap: Record<string, typeof chalk.blue> = {
+    'DDS': chalk.magenta,
+    'GENERAL': chalk.blue
+  };
+  return colorMap[type] || chalk.blue;
+}
+
 // Helper function to validate directory exists
 function validateDirectory(directory: string): boolean {
   if (!fs.existsSync(directory)) {
@@ -85,7 +94,7 @@ program
         console.log(chalk.dim(`   Path: ${mod.path}`));
         console.log(`   Archives: ${chalk.cyan(mod.archives.length.toString())}`);
         mod.archives.forEach(archive => {
-          const typeColor = archive.type === 'DDS' ? chalk.magenta : chalk.blue;
+          const typeColor = getArchiveTypeColor(archive.type);
           console.log(`     ${typeColor('•')} ${archive.fileName} (${typeColor(archive.type)}, ${formatBytes(archive.size)})`);
         });
         console.log(`   Plugins: ${chalk.cyan(mod.plugins.length.toString())}`);
@@ -252,8 +261,10 @@ program
 
       // Calculate statistics
       const totalMods = groups.reduce((sum, g) => sum + g.mods.length, 0);
-      const reduction = ((totalMods - groups.length) / totalMods * 100).toFixed(1);
-      console.log(chalk.bold(`📊 Impact: ${totalMods} archives → ${groups.length} merged archives (${reduction}% reduction)\n`));
+      if (totalMods > 0) {
+        const reduction = ((totalMods - groups.length) / totalMods * 100).toFixed(1);
+        console.log(chalk.bold(`📊 Impact: ${totalMods} archives → ${groups.length} merged archives (${reduction}% reduction)\n`));
+      }
 
       // Dry run mode
       if (options.dryRun) {

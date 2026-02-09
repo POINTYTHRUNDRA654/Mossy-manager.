@@ -32,6 +32,8 @@ export class ModManagerDetector {
 
   /**
    * Detect Mod Organizer 2 installation
+   * Supports Windows and Linux (via Wine/Proton)
+   * Note: macOS is not officially supported by Mod Organizer 2
    */
   detectMO2(): ModManagerInfo | null {
     const platform = os.platform();
@@ -61,6 +63,9 @@ export class ModManagerDetector {
         path.join(home, '.wine/drive_c/Program Files (x86)/Mod Organizer 2'),
         path.join(home, '.local/share/Steam/steamapps/compatdata/*/pfx/drive_c/Program Files/Mod Organizer 2')
       );
+    } else {
+      // macOS and other platforms not supported
+      return null;
     }
     
     // Check each possible path
