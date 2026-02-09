@@ -101,6 +101,59 @@ pyinstaller --onefile --windowed --name MossyManager mossy_manager.py
    - Visit the Settings tab to customize the application behavior
    - Save your preferences using the "Save Settings" button
 
+## Testing
+
+### Automated Tests
+
+Run the comprehensive test suite:
+
+```bash
+python3 test_mossy_manager.py
+```
+
+The test suite includes:
+- Settings management tests
+- Path validation tests
+- Mod discovery tests
+- Cross-platform compatibility tests
+- Configuration file operations tests
+
+All tests run without requiring a GUI or display.
+
+### Demo Mode
+
+Try the interactive demo to see how the application works:
+
+```bash
+python3 demo.py
+```
+
+This creates a test MO2 structure and demonstrates core functionality.
+
+### Manual Testing
+
+See [TESTING.md](TESTING.md) for comprehensive manual testing instructions.
+
+## Usage
+
+1. **Launch the Application**
+   - Run the executable or `python3 mossy_manager.py`
+
+2. **Set MO2 Path**
+   - In the Manager tab, click "Browse..." to select your Mod Organizer 2 installation directory
+   - This should be the folder containing `ModOrganizer.exe`
+
+3. **View Mods**
+   - Once the path is set, click "Refresh Mods" to see your installed mods
+   - The list will display all mod folders found in your MO2/mods directory
+
+4. **Launch MO2**
+   - Click "Launch MO2" to start Mod Organizer 2 directly from the application
+
+5. **Configure Settings**
+   - Visit the Settings tab to customize the application behavior
+   - Save your preferences using the "Save Settings" button
+
 ## File Structure
 
 ```
@@ -110,7 +163,12 @@ Mossy-manager/
 ├── requirements.txt      # Python dependencies
 ├── build.sh             # Linux/Mac build script
 ├── build.bat            # Windows build script
+├── test_mossy_manager.py # Automated test suite
+├── demo.py              # Demo and testing script
 ├── README.md            # This file
+├── TESTING.md           # Comprehensive testing guide
+├── QUICKSTART.md        # Quick start guide
+├── RELEASING.md         # Release instructions
 └── LICENSE              # GPL-3.0 License
 ```
 

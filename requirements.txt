@@ -1,8 +1,10 @@
 # Mossy Manager Dependencies
 # Python 3.8+ required
 
-# No external dependencies required for basic functionality
-# tkinter is included with Python standard library
-
 # For building executable:
 pyinstaller>=5.0.0
+
+# Testing dependencies (optional)
+# All tests use standard library modules (unittest, tempfile, etc.)
+# No additional dependencies required for testing
+
