@@ -5,7 +5,7 @@ Detects and helps resolve conflicts between mods
 
 import os
 from pathlib import Path
-from typing import List, Dict, Set, Optional, Tuple
+from typing import List, Dict, Set, Optional, Tuple, Any
 from enum import Enum
 import logging
 
@@ -310,7 +310,7 @@ class ConflictResolver:
         }
         return stats
     
-    def export_for_xedit(self) -> List[Dict[str, any]]:
+    def export_for_xedit(self) -> List[Dict[str, Any]]:
         """
         Export conflicts in a format suitable for xEdit processing
         

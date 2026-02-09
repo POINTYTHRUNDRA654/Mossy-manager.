@@ -4,16 +4,6 @@
   "conflicts": [
     {
       "type": "file_override",
-      "resource": "textures/sky.dds",
-      "severity": "medium",
-      "mods": [
-        "ModB",
-        "ModA"
-      ],
-      "plugins": []
-    },
-    {
-      "type": "file_override",
       "resource": "plugin.esp",
       "severity": "critical",
       "mods": [
@@ -23,6 +13,16 @@
       "plugins": [
         "plugin.esp"
       ]
+    },
+    {
+      "type": "file_override",
+      "resource": "textures/sky.dds",
+      "severity": "medium",
+      "mods": [
+        "ModB",
+        "ModA"
+      ],
+      "plugins": []
     }
   ]
 }

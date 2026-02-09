@@ -158,8 +158,15 @@ class XEditIntegration:
             conflict_plugins = self._extract_plugins_from_conflict(conflict)
             plugins.update(conflict_plugins)
         
-        plugin_list = ', '.join(f"'{p}'" for p in plugins)
+        # Build plugin list with proper Pascal escaping (double single quotes)
+        plugin_list_parts = []
+        for p in plugins:
+            # Escape single quotes in plugin names by doubling them
+            escaped_plugin = p.replace("'", "''")
+            plugin_list_parts.append(escaped_plugin)
+        plugin_list_str = ', '.join(plugin_list_parts)
         
+        # Build the script with proper Pascal string escaping
         script = f'''unit {patch_name.replace(" ", "_")}_Script;
 
 {{
@@ -186,7 +193,7 @@ begin
   end;
   
   AddMessage('Created patch plugin: {patch_name}.esp');
-  AddMessage('Resolving conflicts from plugins: {plugin_list}');
+  AddMessage('Resolving conflicts from plugins: {plugin_list_str}');
   
   // Note: Actual conflict resolution requires manual intervention in xEdit
   // This script sets up the patch file. Use xEdit''s conflict detection

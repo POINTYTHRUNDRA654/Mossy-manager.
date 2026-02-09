@@ -24,7 +24,7 @@ begin
   end;
   
   AddMessage('Created patch plugin: DemoConflictPatch.esp');
-  AddMessage('Resolving conflicts from plugins: 'plugin.esp'');
+  AddMessage('Resolving conflicts from plugins: plugin.esp');
   
   // Note: Actual conflict resolution requires manual intervention in xEdit
   // This script sets up the patch file. Use xEdit''s conflict detection
