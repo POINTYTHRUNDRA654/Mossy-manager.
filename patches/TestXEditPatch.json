@@ -1,0 +1,14 @@
+{
+  "name": "TestXEditPatch",
+  "description": "A test patch for xEdit",
+  "created_at": "2026-02-09T00:45:46.738103",
+  "operations": [
+    {
+      "type": "merge",
+      "timestamp": "2026-02-09T00:45:46.738113",
+      "file": "Data/example.ini",
+      "content": "# Patch content - edit in xEdit"
+    }
+  ],
+  "target_mods": []
+}

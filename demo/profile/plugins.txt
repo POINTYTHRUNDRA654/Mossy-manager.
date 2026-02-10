@@ -1,0 +1,11 @@
+# Mod Organizer 2 plugins file - Demo
+*Skyrim.esm
+*Update.esm
+*Dawnguard.esm
+*HearthFires.esm
+*Dragonborn.esm
+SkyUI.esp
+*SMIM.esp
+*EnhancedLights.esp
+WeatherMod.esp
+*TextureMod.esp
