@@ -1,0 +1,140 @@
+name: Build and Release
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:  # Allow manual triggers
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      
+      - name: Build executable
+        run: |
+          python build.py
+      
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v3
+        with:
+          name: MossyManager-Windows
+          path: dist/MossyManager.exe
+      
+      - name: Upload to release
+        if: github.event_name == 'release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./dist/MossyManager.exe
+          asset_name: MossyManager-Windows.exe
+          asset_content_type: application/octet-stream
+  
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      
+      - name: Build executable
+        run: |
+          python build.py
+      
+      - name: Make executable
+        run: |
+          chmod +x dist/MossyManager 2>/dev/null || chmod +x dist/MossyManager.bin
+      
+      - name: Upload Linux executable
+        uses: actions/upload-artifact@v3
+        with:
+          name: MossyManager-Linux
+          path: dist/MossyManager*
+      
+      - name: Upload to release
+        if: github.event_name == 'release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./dist/MossyManager
+          asset_name: MossyManager-Linux
+          asset_content_type: application/octet-stream
+  
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      
+      - name: Build executable
+        run: |
+          python build.py
+      
+      - name: Make executable
+        run: |
+          chmod +x dist/MossyManager 2>/dev/null || chmod +x dist/MossyManager.app/Contents/MacOS/MossyManager
+      
+      - name: Upload macOS executable
+        uses: actions/upload-artifact@v3
+        with:
+          name: MossyManager-macOS
+          path: dist/MossyManager*
+      
+      - name: Create DMG (optional)
+        if: github.event_name == 'release'
+        run: |
+          # Create a simple DMG for distribution
+          hdiutil create -volname "MossyManager" -srcfolder dist -ov -format UDZO MossyManager-macOS.dmg
+      
+      - name: Upload to release
+        if: github.event_name == 'release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./MossyManager-macOS.dmg
+          asset_name: MossyManager-macOS.dmg
+          asset_content_type: application/octet-stream
