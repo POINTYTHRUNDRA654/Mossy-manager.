@@ -186,5 +186,70 @@ class TestConflictResolver:
         assert stats['mods_scanned'] == 2
 
 
+    def test_conflict_repr(self):
+        """Test Conflict __repr__"""
+        conflict = Conflict(
+            ConflictType.FILE_OVERRIDE,
+            "textures/sky.dds",
+            ["ModA", "ModB"],
+            severity="medium"
+        )
+        r = repr(conflict)
+        assert "file_override" in r
+        assert "textures/sky.dds" in r
+        assert "mods=2" in r
+        assert "medium" in r
+
+
+class TestConflictResolverExtra:
+    """Additional tests for uncovered ConflictResolver code paths."""
+
+    def test_export_for_xedit(self):
+        """Test exporting conflicts for xEdit"""
+        resolver = ConflictResolver()
+        resolver.mod_files["ModA"] = {"test.dds", "test.esp"}
+        resolver.mod_files["ModB"] = {"test.dds", "test.esp"}
+
+        exported = resolver.export_for_xedit()
+
+        assert isinstance(exported, list)
+        assert len(exported) > 0
+        for item in exported:
+            assert "type" in item
+            assert "resource" in item
+            assert "severity" in item
+            assert "mods" in item
+
+    def test_export_for_xedit_empty(self):
+        """export_for_xedit with no mod files returns empty list"""
+        resolver = ConflictResolver()
+        exported = resolver.export_for_xedit()
+        assert exported == []
+
+    def test_suggest_resolution_high(self):
+        """Test suggest_resolution for high severity"""
+        resolver = ConflictResolver()
+        conflict = Conflict(
+            ConflictType.SCRIPT_CONFLICT,
+            "scripts/myScript.pex",
+            ["ModA", "ModB"],
+            severity="high"
+        )
+        suggestion = resolver.suggest_resolution(conflict)
+        assert "HIGH" in suggestion
+
+    def test_suggest_resolution_low(self):
+        """Test suggest_resolution for low severity"""
+        resolver = ConflictResolver()
+        conflict = Conflict(
+            ConflictType.FILE_OVERRIDE,
+            "readme.txt",
+            ["ModA", "ModB"],
+            severity="low"
+        )
+        suggestion = resolver.suggest_resolution(conflict)
+        assert "LOW" in suggestion
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

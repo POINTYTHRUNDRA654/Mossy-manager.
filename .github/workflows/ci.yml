@@ -31,4 +31,4 @@ jobs:
           pip install -e .
 
       - name: Run tests
-        run: pytest tests/ -v
+        run: pytest tests/ -v --cov=src/mossy_manager --cov-report=term-missing

@@ -173,5 +173,100 @@ class TestLoadOrderManager:
         assert stats['regular'] == 2
 
 
+class TestPluginRepr:
+    """Test Plugin __repr__ and dependencies attribute"""
+
+    def test_plugin_repr_enabled(self):
+        p = Plugin("MyMod.esp", enabled=True, priority=5)
+        r = repr(p)
+        assert "✓" in r
+        assert "MyMod.esp" in r
+        assert "005" in r
+
+    def test_plugin_repr_disabled(self):
+        p = Plugin("MyMod.esp", enabled=False, priority=2)
+        r = repr(p)
+        assert "✗" in r
+
+    def test_plugin_dependencies_default_empty(self):
+        p = Plugin("MyMod.esp")
+        assert p.dependencies == []
+
+
+class TestLoadOrderManagerExtra:
+    """Additional tests for uncovered LoadOrderManager code paths."""
+
+    def test_load_loadorder_txt(self):
+        """Test loading load order from loadorder.txt"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lo_file = Path(tmpdir) / "loadorder.txt"
+            lo_file.write_text(
+                "# Comment\nFallout4.esm\nDLCRobot.esm\nMyMod.esp\n"
+            )
+
+            manager = LoadOrderManager()
+            manager.load_loadorder_txt(lo_file)
+
+            assert manager._load_order == ["Fallout4.esm", "DLCRobot.esm", "MyMod.esp"]
+
+    def test_load_loadorder_txt_updates_plugin_priority(self):
+        """load_loadorder_txt should update priority for already-loaded plugins"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lo_file = Path(tmpdir) / "loadorder.txt"
+            lo_file.write_text("Fallout4.esm\nMyMod.esp\n")
+
+            manager = LoadOrderManager()
+            manager.plugins["Fallout4.esm"] = Plugin("Fallout4.esm", priority=99)
+            manager.plugins["MyMod.esp"] = Plugin("MyMod.esp", priority=99)
+            manager.load_loadorder_txt(lo_file)
+
+            assert manager.plugins["Fallout4.esm"].priority == 1
+            assert manager.plugins["MyMod.esp"].priority == 2
+
+    def test_load_loadorder_txt_missing_file(self):
+        """load_loadorder_txt with missing file should leave _load_order unchanged"""
+        manager = LoadOrderManager()
+        manager.load_loadorder_txt(Path("/nonexistent/loadorder.txt"))
+        assert manager._load_order == []
+
+    def test_save_loadorder_txt(self):
+        """Test saving load order to loadorder.txt"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = LoadOrderManager()
+            manager.plugins["Master.esm"] = Plugin("Master.esm", priority=1)
+            manager.plugins["Mod.esp"] = Plugin("Mod.esp", priority=2)
+            manager._load_order = ["Master.esm", "Mod.esp"]
+
+            out = Path(tmpdir) / "loadorder.txt"
+            manager.save_loadorder_txt(out)
+
+            assert out.exists()
+            content = out.read_text()
+            assert "Master.esm" in content
+            assert "Mod.esp" in content
+
+    def test_set_load_order(self):
+        """Test set_load_order updates priorities"""
+        manager = LoadOrderManager()
+        manager.plugins["Alpha.esp"] = Plugin("Alpha.esp", priority=3)
+        manager.plugins["Beta.esm"] = Plugin("Beta.esm", priority=1)
+
+        manager.set_load_order(["Beta.esm", "Alpha.esp"])
+
+        assert manager._load_order == ["Beta.esm", "Alpha.esp"]
+        assert manager.plugins["Beta.esm"].priority == 1
+        assert manager.plugins["Alpha.esp"].priority == 2
+
+    def test_get_load_order_from_load_order(self):
+        """get_load_order returns _load_order copy when set"""
+        manager = LoadOrderManager()
+        manager._load_order = ["A.esm", "B.esp"]
+        order = manager.get_load_order()
+        assert order == ["A.esm", "B.esp"]
+        # Should be a copy, not the same list
+        order.append("C.esp")
+        assert len(manager._load_order) == 2
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

@@ -238,5 +238,31 @@ class TestMO2Integration:
         assert info["mo2_path"] is None
 
 
+    def test_detect_game_instance_returns_mo2_path(self):
+        """detect_game_instance returns mo2_path when no portable instance exists"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mo2 = MO2Integration(Path(tmpdir))
+            result = mo2.detect_game_instance("Fallout4")
+            assert result == Path(tmpdir)
+
+    def test_detect_game_instance_portable(self):
+        """detect_game_instance returns portable path when it exists"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a 'Fallout4' sub-directory to simulate a portable instance
+            (Path(tmpdir) / "Fallout4").mkdir()
+            mo2 = MO2Integration(Path(tmpdir))
+            result = mo2.detect_game_instance("Fallout4")
+            assert result == Path(tmpdir) / "Fallout4"
+
+    def test_detect_game_instance_no_mo2_path(self):
+        """detect_game_instance when mo2_path is None and auto-detect fails"""
+        mo2 = MO2Integration()
+        # Patch detect_mo2_installation to return None so no side-effects occur
+        from unittest.mock import patch
+        with patch.object(type(mo2), "detect_mo2_installation", return_value=None):
+            result = mo2.detect_game_instance("Fallout4")
+        assert result is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
