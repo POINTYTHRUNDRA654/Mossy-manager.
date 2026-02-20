@@ -68,14 +68,15 @@ def main():
         print("✓ Build successful!")
         print()
         
-        # Check if executable was created
-        exe_path = Path("dist/MossyManager.exe")
+        # Check if executable was created (name differs by platform)
+        exe_name = "MossyManager.exe" if sys.platform == "win32" else "MossyManager"
+        exe_path = Path("dist") / exe_name
         if exe_path.exists():
             size_mb = exe_path.stat().st_size / (1024 * 1024)
             print(f"Executable created: {exe_path}")
             print(f"Size: {size_mb:.2f} MB")
             print()
-            print("You can now distribute the MossyManager.exe file!")
+            print(f"You can now distribute the {exe_name} file!")
             print("Users can run it directly without installing Python.")
         else:
             print("⚠ Warning: Executable not found at expected location")
