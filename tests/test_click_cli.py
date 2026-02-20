@@ -101,7 +101,8 @@ class TestLoadOrderCommands:
         out = tmp_path / "optimized.txt"
         r = runner.invoke(main, ["loadorder", "optimize",
                                   "--plugins-file", str(plugins_file),
-                                  "--output", str(out)])
+                                  "--output", str(out),
+                                  "--apply"])
         assert r.exit_code == 0
         assert out.exists()
 
@@ -195,7 +196,8 @@ class TestResolveXeditCommand:
         out = tmp_path / "xedit_out"
         r = runner.invoke(main, ["conflicts", "resolve-xedit",
                                   "--mods-dir", str(mods_dir),
-                                  "--output-dir", str(out)])
+                                  "--output-dir", str(out),
+                                  "--apply"])
         assert r.exit_code == 0
         assert out.exists()
 

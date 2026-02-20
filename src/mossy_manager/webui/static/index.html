@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mossy Manager UI</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --muted: #94a3b8;
+      --text: #e2e8f0;
+      --accent: #38bdf8;
+      --accent-2: #a78bfa;
+      --danger: #f87171;
+      --warn: #fbbf24;
+      --success: #34d399;
+      --border: #1f2937;
+      --card: #0b1222;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(56,189,248,0.05), transparent 25%),
+                  radial-gradient(circle at 80% 0%, rgba(167,139,250,0.08), transparent 30%),
+                  var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: rgba(17,24,39,0.9);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      backdrop-filter: blur(8px);
+      z-index: 2;
+    }
+    h1 { font-size: 18px; margin: 0 8px 0 0; }
+    select, button, input[type="checkbox"] {
+      font: inherit;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: #0b1222;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    button {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0b1222;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+    button:active { transform: translateY(1px); }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    main { flex: 1; display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px; }
+    .panel {
+      background: rgba(17,24,39,0.85);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    .panel h2 { margin: 0 0 8px; font-size: 14px; letter-spacing: 0.02em; color: var(--muted); }
+    .list { max-height: calc(100vh - 120px); overflow: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 6px 8px; text-align: left; font-size: 12px; border-bottom: 1px solid var(--border); }
+    th { position: sticky; top: 0; background: #0d1525; z-index: 1; }
+    .tag { padding: 2px 6px; border-radius: 6px; font-size: 11px; }
+    .tag.master { background: rgba(56,189,248,0.15); color: var(--accent); }
+    .tag.light { background: rgba(167,139,250,0.15); color: var(--accent-2); }
+    .tag.regular { background: rgba(148,163,184,0.15); color: var(--muted); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .ok { background: var(--success); }
+    .warn { background: var(--warn); }
+    .err { background: var(--danger); }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+    .flex { display: flex; align-items: center; gap: 10px; }
+    .flex-between { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .toast { position: fixed; right: 16px; bottom: 16px; padding: 12px 14px; background: #0d1525; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 24px rgba(0,0,0,0.35); display: none; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .stack { display: grid; gap: 8px; }
+    .input-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .input-row label { font-size: 12px; color: var(--muted); }
+    .box { padding: 10px; border-radius: 8px; border: 1px dashed var(--border); background: rgba(255,255,255,0.02); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Mossy Manager</h1>
+    <div class="pill" id="mo2-pill">Detecting MO2…</div>
+    <label class="pill">
+      Profile
+      <select id="profile-select"></select>
+    </label>
+    <div class="actions">
+      <button id="optimize-btn">Optimize</button>
+      <button id="conflicts-btn" style="background: linear-gradient(135deg, #fbbf24, #f97316); color: #0b1222;">Scan Conflicts</button>
+    </div>
+    <div class="pill" id="tools-pill">Tools</div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Plugins</h2>
+      <div class="list">
+        <table id="plugins-table">
+          <thead>
+            <tr><th>#</th><th>Name</th><th>Type</th><th>Enabled</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="stack">
+        <div class="flex-between">
+          <h2>Session</h2>
+          <div class="input-row">
+            <label><input type="checkbox" id="apply-toggle" /> Apply</label>
+            <label><input type="checkbox" id="backup-toggle" checked /> Backup</label>
+          </div>
+        </div>
+
+        <div class="cards">
+          <div class="card" id="status-card">
+            <div class="flex-between">
+              <div>
+                <div class="muted">Status</div>
+                <div id="status-text">Ready</div>
+              </div>
+              <span class="status-dot ok" id="status-dot"></span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="muted">Issues</div>
+            <div id="issues-count">-</div>
+          </div>
+          <div class="card">
+            <div class="muted">Recommendations</div>
+            <div id="rec-list" class="muted">-</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="flex-between">
+            <div>
+              <div class="muted">Optimized Preview</div>
+              <div id="summary-line">Run optimize to preview.</div>
+            </div>
+            <button id="refresh-btn" style="background: #0ea5e9; color: #0b1222;">Refresh</button>
+          </div>
+          <div class="box" id="results-box"></div>
+        </div>
+
+        <div class="card">
+          <div class="muted">Conflicts</div>
+          <div id="conflict-stats">-</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const profileSelect = document.getElementById("profile-select");
+    const pluginsTableBody = document.querySelector("#plugins-table tbody");
+    const statusText = document.getElementById("status-text");
+    const statusDot = document.getElementById("status-dot");
+    const issuesCount = document.getElementById("issues-count");
+    const recList = document.getElementById("rec-list");
+    const summaryLine = document.getElementById("summary-line");
+    const resultsBox = document.getElementById("results-box");
+    const conflictStats = document.getElementById("conflict-stats");
+    const applyToggle = document.getElementById("apply-toggle");
+    const backupToggle = document.getElementById("backup-toggle");
+    const toast = document.getElementById("toast");
+    const mo2Pill = document.getElementById("mo2-pill");
+    const toolsPill = document.getElementById("tools-pill");
+
+    async function fetchJson(url, options = {}) {
+      const res = await fetch(url, { headers: { "Content-Type": "application/json" }, ...options });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || res.statusText);
+      }
+      return res.json();
+    }
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.style.display = "block";
+      setTimeout(() => { toast.style.display = "none"; }, 2800);
+    }
+
+    async function loadMo2() {
+      try {
+        const data = await fetchJson("/api/mo2");
+        mo2Pill.textContent = data.mo2_path ? `MO2: ${data.mo2_path}` : "MO2 detected";
+        profileSelect.innerHTML = "";
+        data.profiles.forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = p; opt.textContent = p;
+          profileSelect.appendChild(opt);
+        });
+        if (data.profiles.length) {
+          profileSelect.value = data.profiles[0];
+          await refreshLoadOrder();
+        }
+      } catch (err) {
+        mo2Pill.textContent = "MO2 not found";
+        showToast(err.message);
+      }
+    }
+
+    async function refreshTools() {
+      try {
+        const data = await fetchJson("/api/tools");
+        toolsPill.textContent = `Tools: ${data.xedit_path ? "xEdit✓" : "xEdit?"}`;
+      } catch (_) {
+        toolsPill.textContent = "Tools: unknown";
+      }
+    }
+
+    function renderPlugins(loadOrder, enabled) {
+      pluginsTableBody.innerHTML = "";
+      loadOrder.forEach((name, idx) => {
+        const tr = document.createElement("tr");
+        const type = name.toLowerCase().endsWith(".esm") ? "master" : name.toLowerCase().endsWith(".esl") ? "light" : "regular";
+        tr.innerHTML = `<td>${idx + 1}</td><td>${name}</td><td><span class="tag ${type}">${type}</span></td><td>${enabled[name] === false ? "✗" : "✓"}</td>`;
+        pluginsTableBody.appendChild(tr);
+      });
+    }
+
+    async function refreshLoadOrder() {
+      const profile = profileSelect.value;
+      if (!profile) return;
+      try {
+        const data = await fetchJson(`/api/loadorder?profile=${encodeURIComponent(profile)}`);
+        renderPlugins(data.load_order, data.enabled || {});
+        statusText.textContent = `Loaded ${data.load_order.length} plugins`;
+        statusDot.className = "status-dot ok";
+      } catch (err) {
+        statusText.textContent = err.message;
+        statusDot.className = "status-dot err";
+        showToast(err.message);
+      }
+    }
+
+    async function optimize() {
+      const profile = profileSelect.value;
+      if (!profile) return;
+      setBusy(true);
+      try {
+        const payload = {
+          profile,
+          apply: applyToggle.checked,
+          backup: backupToggle.checked,
+        };
+        const data = await fetchJson("/api/loadorder/optimize", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        summaryLine.textContent = data.applied ? "Optimized and written." : "Preview ready (dry-run).";
+        resultsBox.textContent = data.optimized_order.slice(0, 10).map((p, i) => `${i + 1}. ${p}`).join("\n");
+        issuesCount.textContent = `${(data.issues.errors || []).length} errors, ${(data.issues.warnings || []).length} warnings`;
+        recList.textContent = data.recommendations && data.recommendations.length ? data.recommendations.slice(0,3).join(" | ") : "None";
+        statusDot.className = data.applied ? "status-dot ok" : "status-dot warn";
+        statusText.textContent = data.applied ? "Applied" : "Preview only";
+        if (data.backup) showToast(`Backup created: ${data.backup}`);
+        await refreshLoadOrder();
+      } catch (err) {
+        statusText.textContent = err.message;
+        statusDot.className = "status-dot err";
+        showToast(err.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function scanConflicts() {
+      const profile = profileSelect.value;
+      if (!profile) return;
+      setBusy(true);
+      try {
+        const data = await fetchJson("/api/conflicts/scan", {
+          method: "POST",
+          body: JSON.stringify({ profile }),
+        });
+        const s = data.stats;
+        conflictStats.textContent = `Scanned ${data.scanned_mods} mods | Critical ${s.critical} | High ${s.high} | Medium ${s.medium} | Low ${s.low}`;
+        statusDot.className = s.critical || s.high ? "status-dot warn" : "status-dot ok";
+        statusText.textContent = "Conflict scan complete";
+      } catch (err) {
+        conflictStats.textContent = err.message;
+        statusDot.className = "status-dot err";
+        showToast(err.message);
+      } finally { setBusy(false); }
+    }
+
+    function setBusy(b) {
+      document.getElementById("optimize-btn").disabled = b;
+      document.getElementById("conflicts-btn").disabled = b;
+      document.getElementById("refresh-btn").disabled = b;
+    }
+
+    document.getElementById("optimize-btn").addEventListener("click", optimize);
+    document.getElementById("conflicts-btn").addEventListener("click", scanConflicts);
+    document.getElementById("refresh-btn").addEventListener("click", refreshLoadOrder);
+    profileSelect.addEventListener("change", refreshLoadOrder);
+
+    loadMo2();
+    refreshTools();
+  </script>
+</body>
+</html>

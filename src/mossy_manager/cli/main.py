@@ -4,14 +4,18 @@ Command-line interface for Mossy Manager
 
 import sys
 import logging
+import webbrowser
 from pathlib import Path
 from typing import Optional
 import json
 from datetime import datetime
+import threading
+import time
 
 import click
 from colorama import init, Fore, Style
 from tabulate import tabulate
+import uvicorn
 
 from mossy_manager.core.load_order import LoadOrderManager
 from mossy_manager.core.conflict_resolver import ConflictResolver
@@ -20,6 +24,7 @@ from mossy_manager.utils.xedit_integration import XEditIntegration
 from mossy_manager.integrations.mo2 import MO2Integration
 from mossy_manager.games.fallout4 import Fallout4Rules
 from mossy_manager.config_manager import ConfigManager
+from mossy_manager.webui.app import app as web_app
 
 # Initialize colorama for cross-platform colored output
 init(autoreset=True)
@@ -34,7 +39,14 @@ logger = logging.getLogger(__name__)
 
 @click.group()
 @click.version_option(version="0.1.0")
-@click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
+@click.option('--verbose', '-v', is_flag=True, # The above code is a Python comment. It starts with a
+# `#` symbol, which indicates that the following text
+# is a comment and will not be executed as code. In
+# this case, the comment mentions `help='Enable verbose
+# logging'`, which seems to be a placeholder for some
+# code or explanation related to enabling verbose
+# logging.
+help='Enable verbose logging')
 def main(verbose):
     """
     Mossy Manager - MO2 Load Order Manager, Conflict Resolution, and Patching Tool
@@ -1081,6 +1093,25 @@ def auto_optimize(mo2_path, profile, game, report, backup, apply):
     
     click.echo(f"{Fore.CYAN}Your game is ready!{Style.RESET_ALL}")
     click.echo(f"Launch {game.upper()} through Mod Organizer 2 to play with your optimized setup.")
+
+
+@main.command('ui')
+@click.option('--host', default='127.0.0.1', show_default=True, help='Host to bind the web UI')
+@click.option('--port', default=8732, show_default=True, type=int, help='Port for the web UI')
+@click.option('--open/--no-open', 'open_browser', default=True, show_default=True,
+              help='Automatically open the browser')
+def ui(host, port, open_browser):
+    """Launch the local web UI (LOOT-style page)"""
+
+    url = f"http://{host}:{port}/"
+    if open_browser:
+        threading.Thread(target=lambda: (time.sleep(0.8), webbrowser.open(url)), daemon=True).start()
+        click.echo(f"Opening browser at {url}")
+    else:
+        click.echo(f"Start your browser at {url}")
+
+    click.echo("Starting web server... (Ctrl+C to stop)")
+    uvicorn.run(web_app, host=host, port=port, log_level="info")
 
 
 @main.command()

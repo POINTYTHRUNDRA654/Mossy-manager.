@@ -52,8 +52,11 @@ def main():
     print("Building executable...")
     print("-" * 60)
     
+    # Invoke PyInstaller via the current interpreter to avoid PATH issues on Windows
     cmd = [
-        "pyinstaller",
+        sys.executable,
+        "-m",
+        "PyInstaller",
         "--clean",
         "--noconfirm",
         str(spec_file)

@@ -56,6 +56,20 @@ mossy info
 
 This displays Mossy Manager version and capabilities.
 
+### Step 4: Launch the UI (LOOT-style)
+
+Run the local web UI (no cloud, opens your browser):
+
+```bash
+# Executable:
+MossyManager.exe ui --open
+
+# From source:
+mossy ui --open
+```
+
+The UI starts a local server on http://127.0.0.1:8732/, detects MO2, and lets you preview/apply load order optimization and run conflict scans. Apply is opt-in; keep "Apply" unchecked for dry-run previews.
+
 ## 🎮 For Fallout 4 Users (Automatic Optimization)
 
 ### Prerequisites

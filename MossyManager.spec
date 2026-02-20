@@ -13,6 +13,7 @@ a = Analysis(
     datas=[
         ('README.md', '.'),
         ('LICENSE', '.'),
+        ('src/mossy_manager/webui/static', 'mossy_manager/webui/static'),
     ],
     hiddenimports=[
         'mossy_manager',
@@ -28,6 +29,12 @@ a = Analysis(
         'mossy_manager.games.fallout4',
         'mossy_manager.integrations',
         'mossy_manager.integrations.mo2',
+        'mossy_manager.webui',
+        'mossy_manager.webui.app',
+        'fastapi',
+        'uvicorn',
+        'pydantic',
+        'starlette',
         'click',
         'colorama',
         'tabulate',
