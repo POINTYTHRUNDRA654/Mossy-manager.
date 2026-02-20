@@ -195,8 +195,11 @@ mossy loadorder optimize --plugins-file plugins.txt --output optimized.txt
 # Scan mods directory for conflicts
 mossy conflicts scan --mods-dir "path/to/mods" --output conflict_report.txt
 
-# Create conflict resolution patch using xEdit
-mossy conflicts resolve-xedit --mods-dir "path/to/mods" --xedit-path "path/to/SSEEdit.exe" --auto-launch
+# Create conflict resolution patch using xEdit (add --apply to write exports)
+mossy conflicts resolve-xedit --mods-dir "path/to/mods" --xedit-path "path/to/SSEEdit.exe" --apply --auto-launch
+
+# Dry-run summary only (default)
+mossy conflicts resolve-xedit --mods-dir "path/to/mods"
 
 # Get help for xEdit integration
 mossy conflicts xedit-help
@@ -327,6 +330,8 @@ xEdit is a powerful tool for viewing and editing Bethesda game plugins. It allow
 
 ### Using xEdit for Conflict Resolution
 
+> Note: `resolve-xedit` runs in dry-run mode by default. Add `--apply` to write exports and scripts. When applying, existing output directories are backed up unless you pass `--no-backup`.
+
 #### Automatic Workflow
 
 ```bash
@@ -335,6 +340,7 @@ mossy conflicts resolve-xedit \
   --mods-dir "C:\Modding\ModOrganizer2\mods" \
   --xedit-path "C:\Modding\Tools\SSEEdit\SSEEdit.exe" \
   --patch-name "MyConflictPatch" \
+  --apply \
   --auto-launch
 ```
 
@@ -352,7 +358,8 @@ This will:
 mossy conflicts resolve-xedit \
   --mods-dir "C:\Modding\ModOrganizer2\mods" \
   --patch-name "MyConflictPatch" \
-  --output-dir "./xedit_output"
+  --output-dir "./xedit_output" \
+  --apply
 ```
 
 Then:

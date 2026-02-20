@@ -6,6 +6,8 @@ import sys
 import logging
 from pathlib import Path
 from typing import Optional
+import json
+from datetime import datetime
 
 import click
 from colorama import init, Fore, Style
@@ -15,6 +17,9 @@ from mossy_manager.core.load_order import LoadOrderManager
 from mossy_manager.core.conflict_resolver import ConflictResolver
 from mossy_manager.core.patcher import Patcher
 from mossy_manager.utils.xedit_integration import XEditIntegration
+from mossy_manager.integrations.mo2 import MO2Integration
+from mossy_manager.games.fallout4 import Fallout4Rules
+from mossy_manager.config_manager import ConfigManager
 
 # Initialize colorama for cross-platform colored output
 init(autoreset=True)
@@ -123,7 +128,11 @@ def validate_loadorder(plugins_file, loadorder_file):
               required=True, help='Path to plugins.txt file')
 @click.option('--output', '-o', type=click.Path(),
               help='Output file for optimized load order')
-def optimize_loadorder(plugins_file, output):
+@click.option('--apply', is_flag=True, default=False,
+              help='Write plugins/loadorder (default is dry-run)')
+@click.option('--backup', is_flag=True, default=True,
+              help='Create backup of plugins/loadorder before writing (when --apply)')
+def optimize_loadorder(plugins_file, output, apply, backup):
     """Optimize load order automatically"""
     manager = LoadOrderManager()
     manager.load_plugins_txt(Path(plugins_file))
@@ -133,15 +142,158 @@ def optimize_loadorder(plugins_file, output):
     
     click.echo(f"{Fore.GREEN}✓ Optimized {len(optimized)} plugins{Style.RESET_ALL}")
     
-    if output:
-        manager.save_loadorder_txt(Path(output))
-        click.echo(f"Saved to: {output}")
+    if apply:
+        # Backup when writing
+        if backup:
+            plugins_path = Path(plugins_file)
+            backup_path = plugins_path.parent / f"plugins_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            try:
+                import shutil
+                shutil.copyfile(plugins_file, backup_path)
+                click.echo(f"Backup created: {backup_path}")
+            except Exception as e:
+                click.echo(f"{Fore.YELLOW}Warning: backup failed: {e}{Style.RESET_ALL}")
+        # Save loadorder and plugins
+        if output:
+            manager.save_loadorder_txt(Path(output))
+            click.echo(f"Saved to: {output}")
+        else:
+            # overwrite original loadorder.txt alongside plugins
+            default_lo = Path(plugins_file).parent / 'loadorder.txt'
+            manager.save_loadorder_txt(default_lo)
+            click.echo(f"Saved to: {default_lo}")
     else:
-        click.echo("\nOptimized order:")
+        click.echo(f"{Fore.YELLOW}DRY RUN: not writing files. Use --apply to write.{Style.RESET_ALL}")
+        click.echo("\nOptimized order (first 20):")
         for i, plugin_name in enumerate(optimized[:20], 1):
             click.echo(f"  {i:3d}. {plugin_name}")
         if len(optimized) > 20:
             click.echo(f"  ... and {len(optimized) - 20} more")
+
+
+@loadorder.command('auto-fo4')
+@click.option('--mo2-path', '-m', type=click.Path(),
+              help='Path to Mod Organizer 2 installation')
+@click.option('--profile', '-p', required=True,
+              help='MO2 profile name')
+@click.option('--backup', is_flag=True, default=True,
+              help='Create backup of the profile before writing')
+@click.option('--report', type=click.Path(),
+              help='Write JSON optimization report to this path')
+@click.option('--dry-run', is_flag=True,
+              help='Show results without writing changes')
+def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run):
+    """
+    Auto-optimize Fallout 4 load order for an MO2 profile using up-to-date rules.
+    Reads plugins/loadorder/modlist, computes best order, and (unless dry-run) writes back.
+    """
+    click.echo(f"{Fore.CYAN}═ Fallout 4 Load Order Auto-Optimize ═{Style.RESET_ALL}")
+
+    # Detect MO2
+    if mo2_path:
+        mo2 = MO2Integration(Path(mo2_path))
+    else:
+        detected = MO2Integration.detect_mo2_installation()
+        if not detected:
+            click.echo(f"{Fore.RED}✗ Could not detect Mod Organizer 2. Specify --mo2-path.{Style.RESET_ALL}")
+            return
+        mo2 = MO2Integration(detected)
+        click.echo(f"Detected MO2 at: {detected}")
+
+    profiles = mo2.list_profiles()
+    if profile not in profiles:
+        click.echo(f"{Fore.RED}✗ Profile '{profile}' not found.{Style.RESET_ALL}")
+        if profiles:
+            click.echo("Available profiles:")
+            for p in profiles:
+                click.echo(f"  • {p}")
+        return
+
+    # Read current state
+    plugins_enabled = mo2.read_plugins_txt(profile)
+    current_order = mo2.read_loadorder_txt(profile)
+    if not current_order:
+        click.echo(f"{Fore.RED}✗ No plugins found in profile.{Style.RESET_ALL}")
+        return
+
+    click.echo(f"Loaded {len(current_order)} plugins from profile {profile}.")
+
+    # Validate and optimize
+    issues = Fallout4Rules.validate_load_order(current_order)
+    optimized = Fallout4Rules.optimize_load_order(current_order)
+
+    moved = []
+    index_map = {name: i for i, name in enumerate(current_order)}
+    for new_idx, name in enumerate(optimized):
+        old_idx = index_map.get(name)
+        if old_idx is not None and old_idx != new_idx:
+            moved.append({
+                'plugin': name,
+                'from': old_idx,
+                'to': new_idx
+            })
+
+    recommendations = Fallout4Rules.get_recommendations(optimized)
+
+    click.echo(f"{Fore.CYAN}Planned changes:{Style.RESET_ALL} {len(moved)} plugins move position.")
+    if issues['errors']:
+        click.echo(f"{Fore.RED}Errors:{Style.RESET_ALL}")
+        for err in issues['errors'][:5]:
+            click.echo(f"  • {err}")
+        if len(issues['errors']) > 5:
+            click.echo(f"  ... and {len(issues['errors']) - 5} more")
+    if issues['warnings']:
+        click.echo(f"{Fore.YELLOW}Warnings:{Style.RESET_ALL}")
+        for warn in issues['warnings'][:5]:
+            click.echo(f"  • {warn}")
+        if len(issues['warnings']) > 5:
+            click.echo(f"  ... and {len(issues['warnings']) - 5} more")
+    if recommendations:
+        click.echo(f"{Fore.CYAN}Recommendations:{Style.RESET_ALL}")
+        for rec in recommendations[:5]:
+            click.echo(f"  • {rec}")
+
+    if dry_run:
+        click.echo(f"{Fore.YELLOW}Dry-run: no files written.{Style.RESET_ALL}")
+    else:
+        # Backup
+        if backup:
+            profile_path = mo2.get_profile_path(profile)
+            if profile_path:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                backup_dir = profile_path.parent / f"{profile}_backup_{timestamp}"
+                import shutil
+                shutil.copytree(profile_path, backup_dir)
+                click.echo(f"Backup created: {backup_dir}")
+
+        # Preserve enabled flags
+        optimized_plugins = {p: plugins_enabled.get(p, True) for p in optimized}
+        mo2.write_plugins_txt(profile, optimized_plugins)
+        mo2.write_loadorder_txt(profile, optimized)
+        click.echo(f"{Fore.GREEN}✓ Load order written to profile.{Style.RESET_ALL}")
+
+    # Report
+    if report:
+        report_data = {
+          'generated_at': datetime.utcnow().isoformat() + 'Z',
+          'profile': profile,
+          'mo2_path': str(mo2.mo2_path) if mo2.mo2_path else None,
+          'counts': {
+            'total': len(current_order),
+            'moved': len(moved)
+          },
+          'issues': issues,
+          'recommendations': recommendations,
+          'current_order': current_order,
+          'optimized_order': optimized,
+          'moved': moved
+        }
+        try:
+            with open(report, 'w', encoding='utf-8') as f:
+                json.dump(report_data, f, indent=2)
+            click.echo(f"Report written to: {report}")
+        except Exception as e:
+            click.echo(f"{Fore.RED}✗ Failed to write report: {e}{Style.RESET_ALL}")
 
 
 @main.group()
@@ -199,6 +351,8 @@ def scan_conflicts(mods_dir, output):
 @conflicts.command('resolve-xedit')
 @click.option('--mods-dir', '-m', type=click.Path(exists=True),
               required=True, help='Path to MO2 mods directory')
+@click.option('--mo2-path', type=click.Path(),
+              help='Path to Mod Organizer 2 (used to locate bundled tools)')
 @click.option('--xedit-path', '-x', type=click.Path(exists=True),
               help='Path to xEdit executable (SSEEdit.exe, TES5Edit.exe, etc.)')
 @click.option('--game', '-g', default='skyrimse',
@@ -209,7 +363,11 @@ def scan_conflicts(mods_dir, output):
               default='./xedit_output', help='Output directory for xEdit files')
 @click.option('--auto-launch', is_flag=True, default=False,
               help='Automatically launch xEdit after export')
-def resolve_xedit(mods_dir, xedit_path, game, patch_name, output_dir, auto_launch):
+@click.option('--backup/--no-backup', default=True,
+              help='Backup existing output directory before writing (when --apply)')
+@click.option('--apply', is_flag=True, default=False,
+              help='Perform export/script generation (default is dry-run)')
+def resolve_xedit(mods_dir, mo2_path, xedit_path, game, patch_name, output_dir, auto_launch, backup, apply):
     """
     Create conflict resolution patch using xEdit
     
@@ -221,8 +379,19 @@ def resolve_xedit(mods_dir, xedit_path, game, patch_name, output_dir, auto_launc
     click.echo(f"{Fore.CYAN}║     xEdit Conflict Resolution - Mossy Manager            ║{Style.RESET_ALL}")
     click.echo(f"{Fore.CYAN}╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
     
-    # Initialize conflict resolver
+    # Initialize conflict resolver and config
     resolver = ConflictResolver(Path(mods_dir))
+    config = ConfigManager()
+
+    # Determine MO2 path (for tool discovery) if not provided
+    mo2 = None
+    if mo2_path:
+        mo2 = MO2Integration(Path(mo2_path))
+    else:
+        detected_mo2 = MO2Integration.detect_mo2_installation()
+        if detected_mo2:
+            mo2 = MO2Integration(detected_mo2)
+            mo2_path = str(detected_mo2)
     
     # Scan mods for conflicts
     click.echo(f"{Fore.CYAN}Step 1: Scanning mods for conflicts...{Style.RESET_ALL}")
@@ -256,29 +425,70 @@ def resolve_xedit(mods_dir, xedit_path, game, patch_name, output_dir, auto_launc
     click.echo(f"  High:     {Fore.YELLOW}{stats['high']}{Style.RESET_ALL}")
     click.echo(f"  Medium:   {stats['medium']}")
     click.echo(f"  Low:      {stats['low']}")
+
+    if not apply:
+        click.echo(f"\n{Fore.YELLOW}DRY RUN: no exports generated. Use --apply to write xEdit files.{Style.RESET_ALL}")
+        return
     
-    # Initialize xEdit integration
+    # Prepare output path and optional backup
+    output_path = Path(output_dir)
+    if backup and output_path.exists():
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = output_path.parent / f"{output_path.name}_backup_{timestamp}"
+        try:
+            import shutil
+            shutil.copytree(output_path, backup_path)
+            click.echo(f"  Backup created: {backup_path}")
+        except Exception as e:
+            click.echo(f"  {Fore.YELLOW}Warning: backup failed: {e}{Style.RESET_ALL}")
+
+    # Initialize xEdit integration, honoring config default if no CLI path
+    xedit_path_final = Path(xedit_path) if xedit_path else None
+    if not xedit_path_final:
+        cfg_xedit = config.get_config('xedit_path')
+        if cfg_xedit:
+            candidate = Path(cfg_xedit)
+            if candidate.exists():
+                xedit_path_final = candidate
+
     xedit = XEditIntegration(
-        xedit_path=Path(xedit_path) if xedit_path else None,
+        xedit_path=xedit_path_final,
         game_data_path=None
     )
-    
-    # Auto-detect xEdit if not provided
-    if not xedit_path:
+
+    # Auto-detect xEdit if not provided; search MO2/tools first
+    if not xedit_path_final:
         click.echo(f"\n{Fore.CYAN}Step 2: Detecting xEdit installation...{Style.RESET_ALL}")
-        detected_path = xedit.detect_xedit(game)
-        if detected_path:
-            xedit.xedit_path = detected_path
-            click.echo(f"  {Fore.GREEN}✓ Found xEdit: {detected_path}{Style.RESET_ALL}")
-        else:
-            click.echo(f"  {Fore.YELLOW}⚠ xEdit not auto-detected{Style.RESET_ALL}")
-            click.echo(f"  Please specify --xedit-path manually")
-            if not auto_launch:
-                click.echo(f"  Continuing without auto-launch...")
+
+        # Prefer FO4Edit bundled inside MO2 (e.g., MO2/tools/FO4Edit)
+        search_roots = []
+        if mo2_path:
+            search_roots.append(Path(mo2_path))
+            tools_dir = Path(mo2_path) / 'tools'
+            if tools_dir.exists():
+                search_roots.append(tools_dir)
+
+        # If MO2 is known, try a direct tool lookup first
+        if mo2:
+            mo2_tool = mo2.find_tool(['FO4Edit.exe', 'xEdit.exe', 'SSEEdit.exe', 'TES5Edit.exe'])
+            if mo2_tool:
+                xedit.xedit_path = mo2_tool
+                click.echo(f"  {Fore.GREEN}✓ Found xEdit in MO2 tools: {mo2_tool}{Style.RESET_ALL}")
+        
+        if not xedit.xedit_path:
+            detected_path = xedit.detect_xedit(game, search_roots=search_roots)
+            if detected_path:
+                xedit.xedit_path = detected_path
+                click.echo(f"  {Fore.GREEN}✓ Found xEdit: {detected_path}{Style.RESET_ALL}")
+            else:
+                click.echo(f"  {Fore.YELLOW}⚠ xEdit not auto-detected{Style.RESET_ALL}")
+                click.echo(f"  Please specify --xedit-path manually")
+                if not auto_launch:
+                    click.echo(f"  Continuing without auto-launch...")
     
     # Create conflict resolution patch
     click.echo(f"\n{Fore.CYAN}Step 3: Generating xEdit files...{Style.RESET_ALL}")
-    output_path = Path(output_dir)
+    click.echo(f"  Writing exports to: {output_path.resolve()}")
     
     result = xedit.create_conflict_resolution_patch(
         conflicts=conflicts,
@@ -709,7 +919,13 @@ def fo4_optimize(mo2_path, profile, backup):
 @click.option('--game', '-g', default='fallout4',
               type=click.Choice(['fallout4'], case_sensitive=False),
               help='Game type')
-def auto_optimize(mo2_path, profile, game):
+@click.option('--report', type=click.Path(),
+              help='Write a combined JSON report (load order + conflicts + recommendations)')
+@click.option('--backup', is_flag=True, default=True,
+              help='Create a profile backup before writing changes')
+@click.option('--apply', is_flag=True, default=False,
+              help='Apply changes (writes plugins/loadorder). Default is dry-run.')
+def auto_optimize(mo2_path, profile, game, report, backup, apply):
     """
     Automatic complete workflow: optimize, detect conflicts, and create patches
     
@@ -755,6 +971,17 @@ def auto_optimize(mo2_path, profile, game):
     
     click.echo(f"Current plugins: {len(current_loadorder)}")
     
+    # Backup profile if requested (only when apply is set)
+    backup_dir = None
+    if apply and backup:
+        profile_path = mo2.get_profile_path(profile)
+        if profile_path:
+            import shutil
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_dir = profile_path.parent / f"{profile}_backup_{timestamp}"
+            shutil.copytree(profile_path, backup_dir)
+            click.echo(f"Backup created: {backup_dir}")
+
     # Validate
     issues = Fallout4Rules.validate_load_order(current_loadorder)
     if issues['errors']:
@@ -766,11 +993,12 @@ def auto_optimize(mo2_path, profile, game):
     optimized = Fallout4Rules.optimize_load_order(current_loadorder)
     optimized_plugins = {p: current_plugins.get(p, True) for p in optimized}
     
-    # Save
-    mo2.write_plugins_txt(profile, optimized_plugins)
-    mo2.write_loadorder_txt(profile, optimized)
-    
-    click.echo(f"{Fore.GREEN}✓ Load order optimized{Style.RESET_ALL}\n")
+    if apply:
+        mo2.write_plugins_txt(profile, optimized_plugins)
+        mo2.write_loadorder_txt(profile, optimized)
+        click.echo(f"{Fore.GREEN}✓ Load order optimized{Style.RESET_ALL}\n")
+    else:
+        click.echo(f"{Fore.YELLOW}DRY RUN: optimized order calculated; not written. Use --apply to write.{Style.RESET_ALL}\n")
     
     # PHASE 2: Conflict Detection
     click.echo(f"{Fore.CYAN}═══ PHASE 2: Conflict Detection ═══{Style.RESET_ALL}\n")
@@ -794,8 +1022,39 @@ def auto_optimize(mo2_path, profile, game):
         click.echo(f"  High: {stats['high']}")
         click.echo(f"  Medium: {stats['medium']}")
         click.echo(f"  Low: {stats['low']}")
+
+        # Category summary
+        analysis = resolver.analyze_conflicts(optimized)
+        if analysis.get('by_category'):
+            click.echo("  By category:")
+            for cat, count in sorted(analysis['by_category'].items(), key=lambda kv: -kv[1]):
+                click.echo(f"    • {cat}: {count}")
         
         click.echo(f"\n{Fore.GREEN}✓ Conflict detection complete{Style.RESET_ALL}\n")
+
+        # Combined report (optional)
+        if report:
+            combined = {
+                'generated_at': datetime.utcnow().isoformat() + 'Z',
+                'profile': profile,
+                'backup': str(backup_dir) if backup_dir else None,
+                'load_order': {
+                    'count': len(current_loadorder),
+                    'issues': issues,
+                    'optimized': optimized,
+                    'slot_count': len([p for p in optimized if not p.lower().endswith('.esl')])
+                },
+                'conflicts': {
+                    'summary': analysis
+                },
+                'recommendations': Fallout4Rules.get_recommendations(optimized)
+            }
+            try:
+                with open(report, 'w', encoding='utf-8') as f:
+                    json.dump(combined, f, indent=2)
+                click.echo(f"{Fore.GREEN}Combined report saved:{Style.RESET_ALL} {report}")
+            except Exception as e:
+                click.echo(f"{Fore.RED}✗ Failed to write combined report: {e}{Style.RESET_ALL}")
         
         # PHASE 3: Recommendations
         click.echo(f"{Fore.CYAN}═══ PHASE 3: Recommendations ═══{Style.RESET_ALL}\n")

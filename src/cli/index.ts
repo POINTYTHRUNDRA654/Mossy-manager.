@@ -188,6 +188,9 @@ program
   .option('--no-backup', 'Skip creating backups')
   .option('--overwrite', 'Overwrite existing merged archives')
   .option('--validate', 'Validate merged archives')
+  .option('--no-loose', 'Skip merging loose (non-BA2) files')
+  .option('--allow-overwrite', 'Allow file overwrites when combining content')
+  .option('--report <file>', 'Write a JSON merge report to the given path')
   .option('--dry-run', 'Preview merge without executing')
   .option('-y, --yes', 'Skip confirmation prompts')
   .action(async (directory: string, options: any) => {
@@ -304,7 +307,9 @@ program
         outputDirectory: options.output,
         createBackup: options.backup !== false,
         overwriteExisting: options.overwrite || false,
-        validateAfterMerge: options.validate || false
+        validateAfterMerge: options.validate || false,
+        includeLooseFiles: options.loose !== false,
+        allowFileOverwrite: options.allowOverwrite || false
       };
 
       const results = await executor.executeMerges(groups, mergeOptions);
@@ -336,6 +341,36 @@ program
         
         // Save to config for next time
         config.updateLastDirectory(directory);
+      }
+
+      // Optional report
+      if (options.report) {
+        const report = {
+          generatedAt: new Date().toISOString(),
+          sourceDirectory: directory,
+          outputDirectory: options.output,
+          options: {
+            includeLooseFiles: mergeOptions.includeLooseFiles !== false,
+            allowFileOverwrite: mergeOptions.allowFileOverwrite || false,
+            validateAfterMerge: mergeOptions.validateAfterMerge || false,
+            overwriteExisting: mergeOptions.overwriteExisting || false,
+            createBackup: mergeOptions.createBackup !== false
+          },
+          groups: groups.map(g => ({
+            name: g.name,
+            mods: g.mods.map(m => m.name),
+            output: path.join(options.output, g.outputFileName),
+            estimatedSize: g.estimatedSize
+          })),
+          results
+        };
+
+        try {
+          fs.writeFileSync(options.report, JSON.stringify(report, null, 2));
+          console.log(chalk.green(`\n✓ Report written to: ${options.report}`));
+        } catch (err) {
+          console.log(chalk.red(`\n✗ Failed to write report: ${err instanceof Error ? err.message : String(err)}`));
+        }
       }
 
     } catch (error) {

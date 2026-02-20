@@ -40,18 +40,20 @@ export class ModParser {
    * Parse multiple mod directories
    */
   async parseMods(modPaths: string[]): Promise<ModInfo[]> {
-    const mods: ModInfo[] = [];
-    
-    for (const modPath of modPaths) {
-      try {
+    const results = await Promise.allSettled(
+      modPaths.map(async modPath => {
         const mod = await this.parseMod(modPath);
-        mods.push(mod);
-      } catch (error) {
-        console.error(`Error parsing mod at ${modPath}:`, error);
-      }
-    }
+        return mod;
+      })
+    );
 
-    return mods;
+    results
+      .filter(r => r.status === 'rejected')
+      .forEach(r => console.error('Error parsing mod:', (r as PromiseRejectedResult).reason));
+
+    return results
+      .filter(r => r.status === 'fulfilled')
+      .map(r => (r as PromiseFulfilledResult<ModInfo>).value);
   }
 
   /**

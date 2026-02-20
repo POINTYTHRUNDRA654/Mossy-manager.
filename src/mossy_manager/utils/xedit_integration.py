@@ -43,7 +43,7 @@ class XEditIntegration:
             'oblivion': 'TES4Edit.exe',
         }
         
-    def detect_xedit(self, game: str = 'skyrimse') -> Optional[Path]:
+    def detect_xedit(self, game: str = 'skyrimse', search_roots: Optional[List[Path]] = None) -> Optional[Path]:
         """
         Try to detect xEdit installation
         
@@ -58,13 +58,15 @@ class XEditIntegration:
             logger.warning(f"Unsupported game: {game}")
             return None
         
-        # Common installation paths to check
+        # Common installation paths to check, plus caller-provided roots (e.g., MO2/tools)
         search_paths = [
             Path.home() / "Downloads",
             Path("C:/") / "Modding" / "Tools",
             Path("C:/") / "Games" / "Modding",
             Path.home() / "Documents" / "Modding",
         ]
+        if search_roots:
+            search_paths = list(search_roots) + search_paths
         
         for base_path in search_paths:
             if base_path.exists():
@@ -148,69 +150,71 @@ class XEditIntegration:
         
         logger.info(f"Generated xEdit script: {script_path}")
         return script_path
-    
+
     def _build_xedit_script(self, conflicts: List[Dict[str, Any]], patch_name: str) -> str:
-        """Build the Pascal script content for xEdit"""
-        
-        # Extract unique plugins from conflicts
+        """Build the Pascal script content for xEdit with category guidance."""
+
+        # Extract unique plugins and categories from conflicts
         plugins = set()
+        categories = set()
         for conflict in conflicts:
             conflict_plugins = self._extract_plugins_from_conflict(conflict)
             plugins.update(conflict_plugins)
-        
+            if 'category' in conflict:
+                categories.add(conflict['category'])
+
         # Build plugin list with proper Pascal escaping (double single quotes)
         plugin_list_parts = []
-        for p in plugins:
-            # Escape single quotes in plugin names by doubling them
-            escaped_plugin = p.replace("'", "''")
+        for plugin in plugins:
+            escaped_plugin = plugin.replace("'", "''")
             plugin_list_parts.append(escaped_plugin)
         plugin_list_str = ', '.join(plugin_list_parts)
-        
-        # Build the script with proper Pascal string escaping
+
+        category_hint = ', '.join(sorted(categories)) if categories else 'mixed'
+
         script = f'''unit {patch_name.replace(" ", "_")}_Script;
 
 {{
-  Mossy Manager - Automated Conflict Resolution Script
-  Generated for patch: {patch_name}
+    Mossy Manager - Automated Conflict Resolution Script
+    Generated for patch: {patch_name}
+    Categories detected: {category_hint}
   
-  This script creates a conflict resolution patch by analyzing
-  conflicts between the specified plugins.
+    This script creates a patch shell and lists involved plugins.
+    Forward records in xEdit per category: scripts first, then plugins, then meshes/textures.
 }}
 
 var
-  patchPlugin: IInterface;
+    patchPlugin: IInterface;
 
 function Initialize: integer;
 begin
-  Result := 0;
+    Result := 0;
   
-  // Create new patch plugin
-  patchPlugin := AddNewFileName('{patch_name}.esp', False);
-  if not Assigned(patchPlugin) then begin
-    AddMessage('Failed to create patch plugin');
-    Result := 1;
-    Exit;
-  end;
+    // Create new patch plugin
+    patchPlugin := AddNewFileName('{patch_name}.esp', False);
+    if not Assigned(patchPlugin) then begin
+        AddMessage('Failed to create patch plugin');
+        Result := 1;
+        Exit;
+    end;
   
-  AddMessage('Created patch plugin: {patch_name}.esp');
-  AddMessage('Resolving conflicts from plugins: {plugin_list_str}');
-  
-  // Note: Actual conflict resolution requires manual intervention in xEdit
-  // This script sets up the patch file. Use xEdit''s conflict detection
-  // and resolution features to complete the patch.
+    AddMessage('Created patch plugin: {patch_name}.esp');
+    AddMessage('Resolving conflicts from plugins: {plugin_list_str}');
+    AddMessage('Categories: {category_hint}');
+    AddMessage('Guidance: Forward winning records, then recheck scripts and navmeshes manually.');
 end;
 
 function Process(e: IInterface): integer;
 begin
-  Result := 0;
-  // Processing logic would go here for automated resolution
-  // In practice, most conflict resolution requires manual review
+    Result := 0;
+    // Automated processing can be added per category if needed.
+    // For now, this is a scaffold to assist manual resolution.
 end;
 
 function Finalize: integer;
 begin
-  Result := 0;
-  AddMessage('Patch creation complete. Review and save in xEdit.');
+    Result := 0;
+    AddMessage('Patch creation complete. Review and save in xEdit.');
 end;
 
 end.

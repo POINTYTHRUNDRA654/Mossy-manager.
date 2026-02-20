@@ -38,6 +38,8 @@ class ConfigManager:
             "mo2_path": "",
             "default_profile": "",
             "auto_backup": "false",
+            "xedit_path": "",
+            "bsarch_path": "",
         }
         self._save_config()
     

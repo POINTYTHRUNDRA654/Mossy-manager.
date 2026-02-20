@@ -33,6 +33,7 @@ class Conflict:
         self.mods = mods
         self.severity = severity  # low, medium, high, critical
         self.resolution: Optional[str] = None
+        self.category: Optional[str] = None
         
     def __repr__(self):
         return (f"Conflict({self.conflict_type.value}, "
@@ -112,6 +113,7 @@ class ConflictResolver:
                     mods=mods,
                     severity=severity
                 )
+                conflict.category = self._categorize_resource(file_path)
                 conflicts.append(conflict)
         
         logger.info(f"Detected {len(conflicts)} file conflicts")
@@ -143,6 +145,23 @@ class ConflictResolver:
         
         # Low: Other files (configs, text files, etc.)
         return "low"
+
+    def _categorize_resource(self, file_path: str) -> str:
+        """Classify resource for prioritization."""
+        lower = file_path.lower()
+        if lower.endswith(('.esp', '.esm', '.esl')):
+            return 'plugin'
+        if lower.endswith(('.pex', '.psc')) or 'scripts' in lower:
+            return 'scripts'
+        if lower.endswith(('.nif', '.tri', '.hkx')):
+            return 'meshes'
+        if lower.endswith(('.dds', '.tga')):
+            return 'textures'
+        if lower.endswith(('.wav', '.fuz', '.xwm', '.mp3')):
+            return 'audio'
+        if lower.endswith(('.ini', '.json', '.xml', '.txt', '.cfg')):
+            return 'config'
+        return 'other'
     
     def analyze_conflicts(self, load_order: List[str]) -> Dict[str, any]:
         """
@@ -168,6 +187,7 @@ class ConflictResolver:
                 'low': 0
             },
             'by_type': {},
+            'by_category': {},
             'winners': {},  # file -> winning mod (last in load order)
             'losers': {}    # file -> list of losing mods
         }
@@ -180,6 +200,10 @@ class ConflictResolver:
             type_name = conflict.conflict_type.value
             analysis['by_type'][type_name] = \
                 analysis['by_type'].get(type_name, 0) + 1
+
+            # Count by category
+            category = conflict.category or 'other'
+            analysis['by_category'][category] = analysis['by_category'].get(category, 0) + 1
             
             # Determine winner based on load order
             winner = self._determine_winner(conflict.mods, load_order)
@@ -271,6 +295,17 @@ class ConflictResolver:
         # Summary
         report.append(f"Total Conflicts: {len(self.conflicts)}")
         report.append("")
+
+        # Category summary for quick prioritization
+        categories: Dict[str, List[Conflict]] = {}
+        for conflict in self.conflicts:
+            cat = conflict.category or 'other'
+            categories.setdefault(cat, []).append(conflict)
+        if categories:
+            report.append("By Category:")
+            for cat, items in sorted(categories.items(), key=lambda kv: -len(kv[1])):
+                report.append(f"  • {cat}: {len(items)}")
+            report.append("")
         
         # Group by severity
         by_severity = {}
@@ -328,7 +363,8 @@ class ConflictResolver:
                 'resource': conflict.resource,
                 'severity': conflict.severity,
                 'mods': conflict.mods,
-                'resolution': conflict.resolution
+                'resolution': conflict.resolution,
+                'category': conflict.category or 'other'
             }
             exported_conflicts.append(conflict_dict)
         

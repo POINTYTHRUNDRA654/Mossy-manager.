@@ -62,4 +62,6 @@ export interface MergeOptions {
   createBackup?: boolean;
   overwriteExisting?: boolean;
   validateAfterMerge?: boolean;
+  includeLooseFiles?: boolean;
+  allowFileOverwrite?: boolean;
 }

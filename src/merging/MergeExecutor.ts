@@ -6,7 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { MergeGroup, MergeOptions, MergeResult, BA2Type } from '../types';
+import { MergeGroup, MergeOptions, MergeResult } from '../types';
 import { BA2Handler } from '../core/BA2Handler';
 
 export class MergeExecutor {
@@ -24,6 +24,11 @@ export class MergeExecutor {
     options: MergeOptions
   ): Promise<MergeResult> {
     const errors: string[] = [];
+    const includeLoose = options.includeLooseFiles !== false;
+    const allowOverwrite = options.allowFileOverwrite === true;
+    const tempRoot = fs.mkdtempSync(path.join(process.cwd(), 'mossy-merge-loose-'));
+    const looseCombined = path.join(tempRoot, 'loose');
+    fs.mkdirSync(looseCombined, { recursive: true });
 
     try {
       // Validate output directory
@@ -53,6 +58,13 @@ export class MergeExecutor {
 
       // Collect all archives from the group
       const allArchives = group.mods.flatMap(mod => mod.archives);
+
+      // Optionally gather loose files (non-BA2) with collision checks
+      if (includeLoose) {
+        for (const mod of group.mods) {
+          this.copyLooseFiles(mod.path, looseCombined, allowOverwrite);
+        }
+      }
       
       if (allArchives.length === 0) {
         errors.push('No archives to merge');
@@ -68,11 +80,15 @@ export class MergeExecutor {
       // Determine archive type (all should be same type)
       const archiveType = allArchives[0].type;
 
-      // Perform the merge
+      // Perform the merge (packs BA2s and incorporates loose files)
       const mergeSuccess = await this.ba2Handler.mergeArchives(
         allArchives,
         outputPath,
-        archiveType
+        archiveType,
+        {
+          extraFilesDir: includeLoose ? looseCombined : undefined,
+          allowOverwrite
+        }
       );
 
       if (!mergeSuccess) {
@@ -112,7 +128,8 @@ export class MergeExecutor {
         errors: []
       };
     } catch (error) {
-      errors.push(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`Unexpected error: ${message}`);
       return {
         success: false,
         outputPath: '',
@@ -120,6 +137,40 @@ export class MergeExecutor {
         fileCount: 0,
         errors
       };
+    } finally {
+      try {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup
+      }
+    }
+  }
+
+  /**
+   * Copy non-BA2 loose files into targetDir with collision checks.
+   */
+  private copyLooseFiles(sourceModDir: string, targetDir: string, allowOverwrite: boolean): void {
+    const entries = fs.readdirSync(sourceModDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(sourceModDir, entry.name);
+      const destPath = path.join(targetDir, entry.name);
+
+      // Skip BA2 archives (handled separately)
+      if (!entry.isDirectory() && entry.name.toLowerCase().endsWith('.ba2')) {
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        if (!fs.existsSync(destPath)) {
+          fs.mkdirSync(destPath, { recursive: true });
+        }
+        this.copyLooseFiles(srcPath, destPath, allowOverwrite);
+      } else {
+        if (fs.existsSync(destPath) && !allowOverwrite) {
+          throw new Error(`Conflict while merging loose files. Duplicate file: ${destPath}`);
+        }
+        fs.copyFileSync(srcPath, destPath);
+      }
     }
   }
 

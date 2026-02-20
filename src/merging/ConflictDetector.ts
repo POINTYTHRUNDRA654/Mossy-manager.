@@ -48,10 +48,23 @@ export class ConflictDetector {
   hasArchiveTypeConflict(mod1: ModInfo, mod2: ModInfo): boolean {
     const mod1Types = new Set(mod1.archives.map(a => a.type));
     const mod2Types = new Set(mod2.archives.map(a => a.type));
-    
-    // If one has only GENERAL and other has only DDS, they can coexist
-    // But if both have mixed types, it's more complex
-    return false; // Simplified - actual logic would be more nuanced
+
+    // If either mod mixes GENERAL and DDS archives, treat as incompatible for now
+    const mod1Mixed = mod1Types.size > 1;
+    const mod2Mixed = mod2Types.size > 1;
+
+    if (mod1Mixed || mod2Mixed) {
+      return true;
+    }
+
+    // If they are single-type but different (GENERAL vs DDS), keep separate
+    if (mod1Types.size === 1 && mod2Types.size === 1) {
+      const [t1] = Array.from(mod1Types);
+      const [t2] = Array.from(mod2Types);
+      return t1 !== t2;
+    }
+
+    return false;
   }
 
   /**

@@ -312,6 +312,14 @@ class Fallout4Rules:
             'errors': [],
             'warnings': []
         }
+
+        # Slot accounting: masters + ESPs count toward 255 cap; ESLs (.esl) do not
+        slot_plugins = [p for p in plugins if not p.lower().endswith('.esl')]
+        slot_count = len(slot_plugins)
+        if slot_count >= 254:
+            issues['errors'].append(f"Plugin cap reached ({slot_count}/255). Convert eligible plugins to ESL or remove some mods.")
+        elif slot_count >= 240:
+            issues['warnings'].append(f"Approaching plugin cap ({slot_count}/255). Consider ESL-flagging small ESPs to free slots.")
         
         # Check if Fallout4.esm is first
         if plugins and plugins[0] != 'Fallout4.esm':
@@ -374,6 +382,14 @@ class Fallout4Rules:
         if not has_unofficial_patch:
             recommendations.append(
                 "Consider installing the Unofficial Fallout 4 Patch for bug fixes"
+            )
+
+        # Plugin cap mitigation suggestions
+        slot_plugins = [p for p in plugins if not p.lower().endswith('.esl')]
+        slot_count = len(slot_plugins)
+        if slot_count >= 240:
+            recommendations.append(
+                f"Plugin count is {slot_count}/255. ESL-flag smaller ESPs or merge patches to free slots."
             )
         
         # Check for F4SE-dependent mods without checking if F4SE is needed

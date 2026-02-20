@@ -98,6 +98,38 @@ class MO2Integration:
             return portable_path
         
         return self.mo2_path
+
+    def find_tool(self, candidate_names: List[str]) -> Optional[Path]:
+        """
+        Search inside the MO2 installation for a tool executable.
+
+        Args:
+            candidate_names: Possible executable names (e.g., ['FO4Edit.exe']).
+
+        Returns:
+            Path to the first match, or None.
+        """
+        if not self.mo2_path:
+            return None
+
+        tool_roots = [self.mo2_path]
+        tools_dir = self.mo2_path / 'tools'
+        if tools_dir.exists():
+            tool_roots.append(tools_dir)
+
+        for root in tool_roots:
+            for name in candidate_names:
+                candidate = root / name
+                if candidate.exists():
+                    return candidate
+
+            # Recursive search in tools folder
+            if root.is_dir():
+                for match in root.rglob('*'):
+                    if match.is_file() and match.name in candidate_names:
+                        return match
+
+        return None
     
     def list_profiles(self) -> List[str]:
         """
