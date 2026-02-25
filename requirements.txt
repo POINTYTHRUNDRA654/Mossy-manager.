@@ -16,9 +16,13 @@ pydantic>=2.8.0
 fastapi>=0.115.0
 uvicorn>=0.30.0
 
-# For building executables
+# AI brain — machine learning (free, open-source)
+scikit-learn>=1.3.0
+numpy>=1.24.0
+
+# For building executables (optional - install with: pip install -e ".[build]")
 pyinstaller>=5.13.0
 
-# Development dependencies
+# Development / testing (optional - install with: pip install -e ".[dev]")
 pytest>=7.4.0
 pytest-cov>=4.1.0

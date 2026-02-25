@@ -134,6 +134,20 @@ class TestConfigManager:
             manager = ConfigManager(config_file)
             assert manager.get_config("mo2_path") == "C:/custom/path"
 
+    def test_default_game_is_fallout4(self):
+        """Test that the default game is fallout4"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_file = Path(tmpdir) / "config.ini"
+            manager = ConfigManager(config_file)
+            assert manager.get_config("game") == "fallout4"
+
+    def test_default_game_path_is_empty(self):
+        """Test that the default game_path is empty"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_file = Path(tmpdir) / "config.ini"
+            manager = ConfigManager(config_file)
+            assert manager.get_config("game_path") == ""
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

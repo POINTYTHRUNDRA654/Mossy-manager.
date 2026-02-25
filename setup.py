@@ -34,7 +34,21 @@ setup(
         "click>=8.1.0",
         "colorama>=0.4.6",
         "tabulate>=0.9.0",
+        "pydantic>=2.8.0",
+        "fastapi>=0.115.0",
+        "uvicorn>=0.30.0",
+        "scikit-learn>=1.3.0",
+        "numpy>=1.24.0",
     ],
+    extras_require={
+        "dev": [
+            "pytest>=7.4.0",
+            "pytest-cov>=4.1.0",
+        ],
+        "build": [
+            "pyinstaller>=5.13.0",
+        ],
+    },
     entry_points={
         "console_scripts": [
             "mossy=mossy_manager.cli.main:main",

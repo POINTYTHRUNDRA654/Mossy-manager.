@@ -7,10 +7,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from mossy_manager.ai.brain import ModAIBrain
+from mossy_manager.ai.fix_generator import FixGenerator
+from mossy_manager.ai.reasoner import ModReasoner
 from mossy_manager.config_manager import ConfigManager
 from mossy_manager.core.conflict_resolver import ConflictResolver
 from mossy_manager.games.fallout4 import Fallout4Rules
 from mossy_manager.integrations.mo2 import MO2Integration
+from mossy_manager.utils.health_checker import ModHealthChecker
 from mossy_manager.utils.xedit_integration import XEditIntegration
 
 
@@ -191,6 +195,118 @@ def build_app() -> FastAPI:
     @app.get("/health")
     def health():
         return {"status": "ok"}
+
+    @app.get("/api/health")
+    def api_health(
+        profile: Optional[str] = None,
+        mo2_path: Optional[str] = None,
+        run_ai: bool = True,
+    ):
+        """
+        Run ``ModHealthChecker`` against the specified profile and return a
+        scored health report (0–100).
+
+        Query parameters
+        ----------------
+        profile : str
+            MO2 profile name (required when mo2_path is supplied).
+        mo2_path : str, optional
+            Path to MO2 installation.  Auto-detected when omitted.
+        run_ai : bool
+            Set to ``false`` to skip the AI brain analysis (faster).
+        """
+        mo2 = None
+        load_order: list = []
+        if mo2_path or profile:
+            try:
+                mo2 = _ensure_mo2(mo2_path)
+                if profile and profile in mo2.list_profiles():
+                    load_order = mo2.read_loadorder_txt(profile)
+            except HTTPException:
+                pass
+
+        if not load_order:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide profile + mo2_path (or auto-detect) to run a health check."
+            )
+
+        checker = ModHealthChecker(run_ai=run_ai)
+        report = checker.check(load_order, profile=profile, mo2=mo2)
+        return report.to_dict()
+
+    # ── AI Brain endpoints ──────────────────────────────────────────────
+
+    @app.post("/api/ai/analyze")
+    def ai_analyze(payload: ConflictScanRequest):
+        """
+        Run a full AI brain analysis (conflict risk, anomalies, clusters,
+        recommendations) on the specified MO2 profile.
+        """
+        mo2 = _ensure_mo2(payload.mo2_path)
+        profile = payload.profile
+        if not profile:
+            raise HTTPException(status_code=400, detail="profile is required for AI analysis")
+        if profile not in mo2.list_profiles():
+            raise HTTPException(status_code=404, detail=f"Profile '{profile}' not found")
+
+        load_order = mo2.read_loadorder_txt(profile)
+        if not load_order:
+            raise HTTPException(status_code=404, detail="No plugins found in profile")
+
+        brain = ModAIBrain()
+        return brain.full_analysis(load_order)
+
+    @app.get("/api/ai/risk/{plugin_name}")
+    def ai_risk(plugin_name: str):
+        """Predict conflict-risk severity for a single plugin by name."""
+        brain = ModAIBrain()
+        return brain.predict_conflict_risk(plugin_name)
+
+    @app.get("/api/ai/compatibility")
+    def ai_compatibility(plugin_a: str, plugin_b: str):
+        """Score compatibility between two plugins."""
+        brain = ModAIBrain()
+        score = brain.score_compatibility(plugin_a, plugin_b)
+        return {
+            "plugin_a": plugin_a,
+            "plugin_b": plugin_b,
+            "compatibility_score": score,
+            "verdict": (
+                "Likely compatible" if score >= 0.75
+                else "May conflict — check manually" if score >= 0.4
+                else "High conflict risk"
+            ),
+        }
+
+    @app.post("/api/ai/fix")
+    def ai_fix(payload: ConflictScanRequest):
+        """
+        Reason about a profile's load order and return complete fix scripts.
+
+        Each entry in the response has ``filename``, ``fix_type``, ``code``,
+        ``description``, and ``can_auto_apply``.
+        """
+        mo2 = _ensure_mo2(payload.mo2_path)
+        profile = payload.profile
+        if not profile:
+            raise HTTPException(status_code=400, detail="profile is required")
+        if profile not in mo2.list_profiles():
+            raise HTTPException(status_code=404, detail=f"Profile '{profile}' not found")
+
+        load_order = mo2.read_loadorder_txt(profile)
+        if not load_order:
+            raise HTTPException(status_code=404, detail="No plugins found in profile")
+
+        reasoning = ModReasoner().reason_about_load_order(load_order)
+        fixes = FixGenerator().generate_fixes(reasoning, load_order=load_order)
+
+        return {
+            "profile": profile,
+            "reasoning_steps": len(reasoning.steps),
+            "conclusion": reasoning.conclusion,
+            "fixes": [f.to_dict() for f in fixes],
+        }
 
     # Fallback index
     @app.get("/", include_in_schema=False)

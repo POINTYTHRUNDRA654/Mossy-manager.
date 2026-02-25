@@ -191,5 +191,68 @@ class TestProfileManager:
                 manager.get_profile_info("NonExistent")
 
 
+class TestProfileManagerFullProfile:
+    """Tests for the complete MO2 profile file set and active-profile tracking."""
+
+    def test_create_profile_creates_plugins_txt(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "profiles").mkdir()
+            manager = ProfileManager(tmpdir)
+            manager.create_profile("FullProfile")
+            assert (Path(tmpdir) / "profiles" / "FullProfile" / "plugins.txt").exists()
+
+    def test_create_profile_creates_loadorder_txt(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "profiles").mkdir()
+            manager = ProfileManager(tmpdir)
+            manager.create_profile("FullProfile")
+            assert (Path(tmpdir) / "profiles" / "FullProfile" / "loadorder.txt").exists()
+
+    def test_switch_profile_writes_active_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profiles_dir = Path(tmpdir) / "profiles"
+            profiles_dir.mkdir()
+            (profiles_dir / "MyProfile").mkdir()
+            manager = ProfileManager(tmpdir)
+            manager.switch_profile("MyProfile")
+            active = (profiles_dir / "_active_profile.txt").read_text().strip()
+            assert active == "MyProfile"
+
+    def test_get_active_profile_after_switch(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profiles_dir = Path(tmpdir) / "profiles"
+            profiles_dir.mkdir()
+            (profiles_dir / "ProfileA").mkdir()
+            (profiles_dir / "ProfileB").mkdir()
+            manager = ProfileManager(tmpdir)
+            manager.switch_profile("ProfileA")
+            assert manager.get_active_profile() == "ProfileA"
+            manager.switch_profile("ProfileB")
+            assert manager.get_active_profile() == "ProfileB"
+
+    def test_get_active_profile_none_when_not_set(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "profiles").mkdir()
+            manager = ProfileManager(tmpdir)
+            assert manager.get_active_profile() is None
+
+    def test_get_profile_info_reports_plugin_count(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profiles_dir = Path(tmpdir) / "profiles"
+            profiles_dir.mkdir()
+            profile_dir = profiles_dir / "P"
+            profile_dir.mkdir()
+            (profile_dir / "modlist.txt").write_text("+ModA\n-ModB\n")
+            (profile_dir / "plugins.txt").write_text("*Fallout4.esm\n*MyMod.esp\n")
+            (profile_dir / "loadorder.txt").write_text("Fallout4.esm\nMyMod.esp\n")
+            manager = ProfileManager(tmpdir)
+            info = manager.get_profile_info("P")
+            assert info["has_plugins"] is True
+            assert info["plugin_count"] == 2
+            assert info["has_loadorder"] is True
+            assert info["loadorder_count"] == 2
+            assert info["mod_count"] == 2
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -24,6 +24,13 @@ class TestXEditIntegration:
         assert 'skyrimse' in xedit.supported_games
         assert 'fallout4' in xedit.supported_games
         assert xedit.supported_games['skyrimse'] == 'SSEEdit.exe'
+        assert xedit.supported_games['fallout4'] == 'FO4Edit.exe'
+
+    def test_detect_xedit_default_game_is_fallout4(self):
+        """detect_xedit should default to fallout4, not skyrimse"""
+        import inspect
+        sig = inspect.signature(XEditIntegration.detect_xedit)
+        assert sig.parameters['game'].default == 'fallout4'
     
     def test_export_conflicts(self):
         """Test exporting conflicts for xEdit"""
