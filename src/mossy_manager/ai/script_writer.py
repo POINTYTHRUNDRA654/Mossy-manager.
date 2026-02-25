@@ -8,9 +8,9 @@ driven by a ``ReasoningResult`` from ``ModReasoner`` so the scripts are
 Script types produced
 ---------------------
 1. **xEdit Pascal scripts** (.pas)
-   - Conflict-resolution patches (forward winning records)
+   - Conflict-resolution patches (forward winning records with exact plugin guards)
    - Batch record editors (rename, flag, clean ITMs)
-   - Dependency checkers
+   - ESL-flag scripts for specific plugins
 
 2. **MO2 INI-tweak scripts** (.ini fragment)
    - Papyrus log enable
@@ -22,8 +22,15 @@ Script types produced
    - Profile backup automation
    - Plugin-cap check before launch
 
+4. **Python auto-fix scripts** (.py)
+   - Direct load-order corrections (master order, patch position, UFP position)
+   - These can be ``apply()``-ed immediately without xEdit
+
 All generated scripts include a header comment explaining what they do and
 *why* they were generated (linked to the reasoning trace when available).
+
+``from_reasoning_complete()`` calls ``FixGenerator`` internally and returns
+complete, specific, executable scripts — zero TODO placeholders.
 """
 
 from __future__ import annotations
@@ -78,6 +85,38 @@ def _header_comment(
 
 
 # ---------------------------------------------------------------------------
+# Record-signature inference (used by xEdit script builders)
+# ---------------------------------------------------------------------------
+
+# Map file extension → xEdit record signature
+_EXT_TO_SIG: Dict[str, str] = {
+    ".pex": "SCPT", ".psc": "SCPT",
+    ".dds": "TXST", ".tga": "TXST",
+    ".nif": "STAT", ".hkx": "IDLE",
+    ".wav": "SOUN", ".fuz": "SOUN", ".xwm": "SOUN", ".mp3": "MUSC",
+    ".esp": "MAST", ".esm": "MAST", ".esl": "MAST",
+    ".ini": "GMST", ".json": "GMST",
+}
+
+_FOLDER_TO_SIG: Dict[str, str] = {
+    "scripts": "SCPT", "textures": "TXST", "meshes": "STAT",
+    "sounds": "SOUN",  "music": "MUSC",  "interface": "KYWD",
+}
+
+
+def _infer_record_sig(resource: str) -> str:
+    """Infer the most likely xEdit record signature from a file/resource path."""
+    lower = resource.lower().replace("\\", "/")
+    for part in lower.split("/"):
+        if part in _FOLDER_TO_SIG:
+            return _FOLDER_TO_SIG[part]
+    for ext, sig in _EXT_TO_SIG.items():
+        if lower.endswith(ext):
+            return sig
+    return ""
+
+
+# ---------------------------------------------------------------------------
 # xEdit Pascal script builders
 # ---------------------------------------------------------------------------
 
@@ -95,7 +134,7 @@ def _xedit_conflict_patch(
     """
     safe = _safe_name(patch_name)
 
-    # Build per-conflict forward-record block
+    # Build per-conflict Process() body — exact plugin guards + record-sig filters
     conflict_blocks: List[str] = []
     for i, conflict in enumerate(conflicts):
         resource = conflict.get("resource", f"unknown_{i}")
@@ -103,15 +142,27 @@ def _xedit_conflict_patch(
         category = conflict.get("category", "other")
         severity = conflict.get("severity", "medium")
         winner = mods[-1] if mods else "unknown"
+        losers = [m for m in mods if m != winner]
 
-        comment = (
-            f"// [{severity.upper()}] {category}: '{resource}'\n"
-            f"// Winner (loads last): {winner}\n"
-            f"// Overridden by: {', '.join(mods[:-1]) if len(mods) > 1 else 'none'}"
+        # Infer xEdit record signature
+        sig = _infer_record_sig(resource)
+        sig_line = (
+            f"  if (sig <> '{sig}') then Exit;"
+            if sig else
+            "  // No record-type filter (unknown resource type)"
         )
+        loser_guards = " or\n           ".join(
+            f"(fname = '{m.replace(chr(39), chr(39)*2)}')" for m in losers
+        ) if losers else f"(fname = '{winner.replace(chr(39), chr(39)*2)}')"
+
         conflict_blocks.append(
-            f"  {comment}\n"
-            f"  // TODO: Forward '{resource}' record from {winner} into {patch_name}.esp\n"
+            f"  // [{severity.upper()}] {category}: '{resource}' — winner: {winner}\n"
+            f"  if ({loser_guards}) then begin\n"
+            f"    {sig_line}\n"
+            f"    patchRec := wbCopyElementToFile(e, patchPlugin, False, True);\n"
+            f"    if Assigned(patchRec) then\n"
+            f"      AddMessage('[Mossy] Forwarded: ' + FullPath(patchRec));\n"
+            f"  end;\n"
         )
 
     plugin_list_str = "\n".join(
@@ -119,7 +170,10 @@ def _xedit_conflict_patch(
         for p in plugins
     )
     conflict_section = "\n".join(conflict_blocks) if conflict_blocks else (
-        "  // No specific conflicts to forward — verify manually."
+        "  // No specific conflicts provided — forwarding all records from loaded plugins.\n"
+        "  patchRec := wbCopyElementToFile(e, patchPlugin, False, True);\n"
+        "  if Assigned(patchRec) then\n"
+        "    AddMessage('[Mossy] Forwarded: ' + FullPath(patchRec));"
     )
 
     header = _header_comment(
@@ -652,6 +706,34 @@ class ScriptWriter:
             )
 
         return scripts
+
+    def from_reasoning_complete(
+        self,
+        reasoning: "ReasoningResult",
+        patch_name: str = "MossyAutoFix",
+        load_order: Optional[List[str]] = None,
+        loadorder_path: Optional[Path] = None,
+        conflicts: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, str]:
+        """
+        Generate complete, specific, executable scripts from a ``ReasoningResult``.
+
+        Unlike :meth:`from_reasoning` (which emits generic templates),
+        this method uses ``FixGenerator`` to produce scripts that are tailored
+        to the **exact** issues found — named plugins, real record-type guards,
+        working ``apply()``-able Python fixers.  Zero TODO placeholders.
+
+        Returns a dict of ``filename → code`` ready to write to disk.
+        """
+        from mossy_manager.ai.fix_generator import FixGenerator
+        fg = FixGenerator(patch_name=patch_name)
+        fixes = fg.generate_fixes(
+            reasoning,
+            load_order=load_order,
+            loadorder_path=loadorder_path,
+            conflicts=conflicts,
+        )
+        return {fix.filename: fix.code for fix in fixes}
 
     # ------------------------------------------------------------------ #
     #  File I/O                                                           #

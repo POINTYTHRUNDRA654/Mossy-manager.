@@ -8,6 +8,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from mossy_manager.ai.brain import ModAIBrain
+from mossy_manager.ai.fix_generator import FixGenerator
+from mossy_manager.ai.reasoner import ModReasoner
 from mossy_manager.config_manager import ConfigManager
 from mossy_manager.core.conflict_resolver import ConflictResolver
 from mossy_manager.games.fallout4 import Fallout4Rules
@@ -235,6 +237,35 @@ def build_app() -> FastAPI:
                 else "May conflict — check manually" if score >= 0.4
                 else "High conflict risk"
             ),
+        }
+
+    @app.post("/api/ai/fix")
+    def ai_fix(payload: ConflictScanRequest):
+        """
+        Reason about a profile's load order and return complete fix scripts.
+
+        Each entry in the response has ``filename``, ``fix_type``, ``code``,
+        ``description``, and ``can_auto_apply``.
+        """
+        mo2 = _ensure_mo2(payload.mo2_path)
+        profile = payload.profile
+        if not profile:
+            raise HTTPException(status_code=400, detail="profile is required")
+        if profile not in mo2.list_profiles():
+            raise HTTPException(status_code=404, detail=f"Profile '{profile}' not found")
+
+        load_order = mo2.read_loadorder_txt(profile)
+        if not load_order:
+            raise HTTPException(status_code=404, detail="No plugins found in profile")
+
+        reasoning = ModReasoner().reason_about_load_order(load_order)
+        fixes = FixGenerator().generate_fixes(reasoning, load_order=load_order)
+
+        return {
+            "profile": profile,
+            "reasoning_steps": len(reasoning.steps),
+            "conclusion": reasoning.conclusion,
+            "fixes": [f.to_dict() for f in fixes],
         }
 
     # Fallback index

@@ -29,6 +29,7 @@ from mossy_manager.webui.app import app as web_app
 from mossy_manager.ai.brain import ModAIBrain
 from mossy_manager.ai.reasoner import ModReasoner
 from mossy_manager.ai.script_writer import ScriptWriter
+from mossy_manager.ai.fix_generator import FixGenerator
 
 # Initialize colorama for cross-platform colored output
 init(autoreset=True)
@@ -1554,6 +1555,94 @@ def ai_script(plugins_file, problem, patch_name, script_type, plugins, output_di
 
     if written:
         click.echo(f"\n{Fore.CYAN}Open the script(s) above to review before use.{Style.RESET_ALL}\n")
+
+
+@ai.command('fix')
+@click.option('--plugins-file', '-p', type=click.Path(exists=True),
+              help='Path to plugins.txt to analyse')
+@click.option('--loadorder-file', '-l', type=click.Path(),
+              help='Path to loadorder.txt (enables direct Python fix application)')
+@click.option('--problem', '-d', default='',
+              help='Free-text problem description (crash, CTD, texture, etc.)')
+@click.option('--patch-name', default='MossyAutoFix',
+              help='Base name for generated patch files (default: MossyAutoFix)')
+@click.option('--output-dir', '-o', type=click.Path(),
+              default='./mossy_fixes',
+              help='Directory to write fix scripts into (default: ./mossy_fixes)')
+@click.option('--apply', 'do_apply', is_flag=True, default=False,
+              help='Automatically apply Python fixes that can run without xEdit')
+def ai_fix(plugins_file, loadorder_file, problem, patch_name, output_dir, do_apply):
+    """
+    Reason about your load order and generate complete, working fix scripts.
+
+    For every issue found the engine writes a ready-to-run script:
+      • Python (.py)    — load-order fixes, applied immediately with --apply
+      • Pascal (.pas)   — xEdit conflict patches with exact record guards
+      • INI fragment    — Fallout4Custom.ini tweaks (Papyrus logging, etc.)
+      • Batch (.bat)    — safe F4SE launch wrapper with plugin-cap check
+
+    Examples:
+      mossy ai fix --plugins-file plugins.txt --apply
+      mossy ai fix --plugins-file plugins.txt --problem "CTD on load"
+      mossy ai fix --problem "purple textures" --output-dir ./my_fixes
+    """
+    click.echo(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════╗")
+    click.echo(f"║   Mossy Manager — Fix Generator                  ║")
+    click.echo(f"╚══════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+
+    # ── Load plugins ──────────────────────────────────────────────────
+    load_order: list = []
+    if plugins_file:
+        mgr = LoadOrderManager()
+        mgr.load_plugins_txt(Path(plugins_file))
+        load_order = mgr.get_load_order()
+        click.echo(f"Loaded {Fore.GREEN}{len(load_order)}{Style.RESET_ALL} plugins\n")
+
+    if not load_order and not problem:
+        click.echo(f"{Fore.YELLOW}⚠ Provide --plugins-file and/or --problem.{Style.RESET_ALL}")
+        return
+
+    # ── Reason about the load order / problem ────────────────────────
+    reasoner = ModReasoner()
+    if problem:
+        reasoning = reasoner.diagnose(problem, load_order)
+    else:
+        reasoning = reasoner.reason_about_load_order(load_order)
+
+    lo_path = Path(loadorder_file) if loadorder_file else None
+
+    click.echo(f"Reasoner found {Fore.YELLOW}{len(reasoning.steps)}{Style.RESET_ALL} issue(s):\n")
+    sev_colour = {"critical": Fore.RED, "error": Fore.RED,
+                  "warning": Fore.YELLOW, "info": Fore.CYAN}
+    for s in reasoning.steps:
+        c = sev_colour.get(s.severity, Fore.WHITE)
+        click.echo(f"  {c}[{s.severity.upper():8s}]{Style.RESET_ALL} {s.rule}: {s.observation[:80]}")
+
+    # ── Generate fixes ────────────────────────────────────────────────
+    fg = FixGenerator(patch_name=patch_name)
+    fixes = fg.generate_fixes(reasoning, load_order=load_order, loadorder_path=lo_path)
+
+    click.echo(f"\nGenerated {Fore.GREEN}{len(fixes)}{Style.RESET_ALL} fix script(s):\n")
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for fix in fixes:
+        dest = out_dir / fix.filename
+        dest.write_text(fix.code, encoding="utf-8")
+        auto_tag = f" {Fore.GREEN}[auto-apply available]{Style.RESET_ALL}" if fix.can_auto_apply else ""
+        click.echo(f"  [{fix.fix_type:10s}] {dest}{auto_tag}")
+        click.echo(f"               {fix.description[:80]}")
+
+        if do_apply and fix.can_auto_apply:
+            try:
+                result = fix.apply()
+                click.echo(f"  {Fore.GREEN}  ✓ Applied:{Style.RESET_ALL} {result}")
+            except Exception as exc:
+                click.echo(f"  {Fore.RED}  ✗ Apply failed:{Style.RESET_ALL} {exc}")
+
+    click.echo(f"\n{Fore.CYAN}All scripts written to: {out_dir}{Style.RESET_ALL}")
+    if not do_apply:
+        click.echo(f"{Fore.CYAN}Tip: re-run with --apply to auto-apply Python fixes.{Style.RESET_ALL}\n")
 
 
 # ============================================================

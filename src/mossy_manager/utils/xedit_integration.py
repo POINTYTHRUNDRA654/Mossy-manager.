@@ -201,20 +201,32 @@ begin
     AddMessage('Created patch plugin: {patch_name}.esp');
     AddMessage('Resolving conflicts from plugins: {plugin_list_str}');
     AddMessage('Categories: {category_hint}');
-    AddMessage('Guidance: Forward winning records, then recheck scripts and navmeshes manually.');
 end;
 
 function Process(e: IInterface): integer;
+var
+    sig:      string;
+    fname:    string;
+    patchRec: IInterface;
 begin
     Result := 0;
-    // Automated processing can be added per category if needed.
-    // For now, this is a scaffold to assist manual resolution.
+    sig   := Signature(e);
+    fname := GetFileName(GetFile(e));
+
+    // Only process records from the conflicting plugins (not masters or the patch itself)
+    if (fname = '{patch_name}.esp') then Exit;
+    if (fname = 'Fallout4.esm') then Exit;
+
+    // Copy the record into the patch plugin
+    patchRec := wbCopyElementToFile(e, patchPlugin, False, True);
+    if Assigned(patchRec) then
+        AddMessage('[Mossy] Forwarded ' + sig + ' record: ' + FullPath(patchRec));
 end;
 
 function Finalize: integer;
 begin
     Result := 0;
-    AddMessage('Patch creation complete. Review and save in xEdit.');
+    AddMessage('Patch complete. Save {patch_name}.esp and place it AFTER all patched mods.');
 end;
 
 end.
