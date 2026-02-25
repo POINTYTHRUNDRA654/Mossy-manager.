@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from mossy_manager.ai.brain import ModAIBrain
 from mossy_manager.config_manager import ConfigManager
 from mossy_manager.core.conflict_resolver import ConflictResolver
 from mossy_manager.games.fallout4 import Fallout4Rules
@@ -191,6 +192,50 @@ def build_app() -> FastAPI:
     @app.get("/health")
     def health():
         return {"status": "ok"}
+
+    # ── AI Brain endpoints ──────────────────────────────────────────────
+
+    @app.post("/api/ai/analyze")
+    def ai_analyze(payload: ConflictScanRequest):
+        """
+        Run a full AI brain analysis (conflict risk, anomalies, clusters,
+        recommendations) on the specified MO2 profile.
+        """
+        mo2 = _ensure_mo2(payload.mo2_path)
+        profile = payload.profile
+        if not profile:
+            raise HTTPException(status_code=400, detail="profile is required for AI analysis")
+        if profile not in mo2.list_profiles():
+            raise HTTPException(status_code=404, detail=f"Profile '{profile}' not found")
+
+        load_order = mo2.read_loadorder_txt(profile)
+        if not load_order:
+            raise HTTPException(status_code=404, detail="No plugins found in profile")
+
+        brain = ModAIBrain()
+        return brain.full_analysis(load_order)
+
+    @app.get("/api/ai/risk/{plugin_name}")
+    def ai_risk(plugin_name: str):
+        """Predict conflict-risk severity for a single plugin by name."""
+        brain = ModAIBrain()
+        return brain.predict_conflict_risk(plugin_name)
+
+    @app.get("/api/ai/compatibility")
+    def ai_compatibility(plugin_a: str, plugin_b: str):
+        """Score compatibility between two plugins."""
+        brain = ModAIBrain()
+        score = brain.score_compatibility(plugin_a, plugin_b)
+        return {
+            "plugin_a": plugin_a,
+            "plugin_b": plugin_b,
+            "compatibility_score": score,
+            "verdict": (
+                "Likely compatible" if score >= 0.75
+                else "May conflict — check manually" if score >= 0.4
+                else "High conflict risk"
+            ),
+        }
 
     # Fallback index
     @app.get("/", include_in_schema=False)

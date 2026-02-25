@@ -21,6 +21,7 @@ from mossy_manager.core.load_order import LoadOrderManager
 from mossy_manager.core.conflict_resolver import ConflictResolver
 from mossy_manager.core.patcher import Patcher
 from mossy_manager.utils.xedit_integration import XEditIntegration
+from mossy_manager.utils.backup_manager import BackupManager
 from mossy_manager.integrations.mo2 import MO2Integration
 from mossy_manager.games.fallout4 import Fallout4Rules
 from mossy_manager.config_manager import ConfigManager
@@ -1357,6 +1358,202 @@ def ai_learn(plugin_name, severity, files, model_dir):
     saved = brain.save(Path(model_dir))
     click.echo(f"\n{Fore.GREEN}✓ AI brain updated and saved to: {saved}{Style.RESET_ALL}")
     click.echo(f"  '{plugin_name}' → severity={severity}\n")
+
+
+# ============================================================
+# Backup command group
+# ============================================================
+
+@main.group()
+def backup():
+    """Create, list, restore and clean up profile backups"""
+    pass
+
+
+def _get_backup_manager(backups_dir: Optional[str]) -> BackupManager:
+    default = Path.home() / ".mossy-manager" / "backups"
+    return BackupManager(Path(backups_dir) if backups_dir else default)
+
+
+@backup.command('create')
+@click.option('--mo2-path', '-m', type=click.Path(), help='Path to MO2 installation')
+@click.option('--profile', '-p', required=True, help='Profile name to back up')
+@click.option('--label', '-l', default='', help='Optional label for this backup')
+@click.option('--backups-dir', type=click.Path(),
+              help='Directory to store backups (default: ~/.mossy-manager/backups)')
+def backup_create(mo2_path, profile, label, backups_dir):
+    """Create a timestamped backup of an MO2 profile."""
+    if mo2_path:
+        mo2 = MO2Integration(Path(mo2_path))
+    else:
+        detected = MO2Integration.detect_mo2_installation()
+        if not detected:
+            click.echo(f"{Fore.RED}✗ Could not detect MO2. Specify --mo2-path.{Style.RESET_ALL}")
+            return
+        mo2 = MO2Integration(detected)
+
+    profile_path = mo2.get_profile_path(profile)
+    if not profile_path:
+        click.echo(f"{Fore.RED}✗ Profile '{profile}' not found.{Style.RESET_ALL}")
+        return
+
+    mgr = _get_backup_manager(backups_dir)
+    dest = mgr.create_backup(profile_path, label=label, profile_name=profile)
+    click.echo(f"{Fore.GREEN}✓ Backup created:{Style.RESET_ALL} {dest}")
+
+
+@backup.command('list')
+@click.option('--profile', '-p', default=None, help='Filter by profile name')
+@click.option('--backups-dir', type=click.Path(),
+              help='Directory where backups are stored')
+def backup_list(profile, backups_dir):
+    """List all available backups."""
+    mgr = _get_backup_manager(backups_dir)
+    entries = mgr.list_backups(profile_name=profile)
+
+    if not entries:
+        click.echo(f"{Fore.YELLOW}No backups found.{Style.RESET_ALL}")
+        return
+
+    click.echo(f"\n{Fore.CYAN}Available backups ({len(entries)}):{Style.RESET_ALL}\n")
+    rows = []
+    for i, e in enumerate(entries, 1):
+        size_mb = round(e.size_bytes / (1024 * 1024), 1)
+        rows.append([i, e.label, e.source_profile, e.created_at[:19], f"{size_mb} MB"])
+    click.echo(tabulate(rows,
+                        headers=["#", "Label", "Profile", "Created", "Size"],
+                        tablefmt="simple"))
+    click.echo()
+
+
+@backup.command('restore')
+@click.option('--backup-path', '-b', type=click.Path(exists=True), required=True,
+              help='Path to the backup directory to restore')
+@click.option('--target', '-t', type=click.Path(), required=True,
+              help='Destination path to restore into')
+@click.option('--overwrite/--no-overwrite', default=True,
+              help='Overwrite the destination if it already exists')
+def backup_restore(backup_path, target, overwrite):
+    """Restore a backup to a specified directory."""
+    mgr = _get_backup_manager(None)
+    try:
+        mgr.restore_backup(Path(backup_path), Path(target), overwrite=overwrite)
+        click.echo(f"{Fore.GREEN}✓ Restored to: {target}{Style.RESET_ALL}")
+    except FileExistsError as exc:
+        click.echo(f"{Fore.RED}✗ {exc}{Style.RESET_ALL}")
+    except Exception as exc:
+        click.echo(f"{Fore.RED}✗ Restore failed: {exc}{Style.RESET_ALL}")
+
+
+@backup.command('cleanup')
+@click.option('--profile', '-p', default=None, help='Only clean up backups for this profile')
+@click.option('--keep', '-k', default=5, show_default=True,
+              help='Number of most-recent backups to keep')
+@click.option('--backups-dir', type=click.Path(),
+              help='Directory where backups are stored')
+def backup_cleanup(profile, keep, backups_dir):
+    """Delete old backups, keeping the N most recent."""
+    mgr = _get_backup_manager(backups_dir)
+    deleted = mgr.cleanup_old_backups(keep=keep, profile_name=profile)
+    if deleted:
+        click.echo(f"{Fore.GREEN}✓ Deleted {deleted} old backup(s).{Style.RESET_ALL}")
+    else:
+        click.echo(f"{Fore.CYAN}Nothing to clean up.{Style.RESET_ALL}")
+
+
+# ============================================================
+# Status command
+# ============================================================
+
+@main.command('status')
+@click.option('--mo2-path', '-m', type=click.Path(), help='Path to MO2 installation')
+@click.option('--profile', '-p', default=None, help='Profile to analyse (optional)')
+def status(mo2_path, profile):
+    """
+    One-shot health check: MO2 installation, profile summary,
+    plugin cap, orphaned mods, and AI quick-scan.
+    """
+    click.echo(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════╗")
+    click.echo(f"║         Mossy Manager — Status Report            ║")
+    click.echo(f"╚══════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+
+    # ── MO2 detection ─────────────────────────────────────────────────
+    if mo2_path:
+        mo2 = MO2Integration(Path(mo2_path))
+    else:
+        detected = MO2Integration.detect_mo2_installation()
+        mo2 = MO2Integration(detected) if detected else MO2Integration()
+
+    if mo2.mo2_path:
+        click.echo(f"{Fore.GREEN}✓ MO2:{Style.RESET_ALL} {mo2.mo2_path}")
+    else:
+        click.echo(f"{Fore.YELLOW}⚠ MO2 not detected — use --mo2-path to specify.{Style.RESET_ALL}")
+
+    profiles = mo2.list_profiles()
+    click.echo(f"  Profiles: {len(profiles)}")
+    for p in profiles[:5]:
+        click.echo(f"    • {p}")
+    if len(profiles) > 5:
+        click.echo(f"    … and {len(profiles) - 5} more")
+
+    # ── Profile detail ────────────────────────────────────────────────
+    target_profile = profile or (profiles[0] if profiles else None)
+    if target_profile:
+        click.echo(f"\n{Fore.CYAN}Profile: {target_profile}{Style.RESET_ALL}")
+        load_order = mo2.read_loadorder_txt(target_profile)
+        plugins_enabled = mo2.read_plugins_txt(target_profile)
+
+        enabled_count = sum(1 for v in plugins_enabled.values() if v)
+        slot_count = sum(1 for p in load_order if not p.lower().endswith(".esl"))
+
+        click.echo(f"  Plugins in load order: {len(load_order)}")
+        click.echo(f"  Enabled: {enabled_count}  |  Slot usage: {slot_count}/255")
+
+        if slot_count >= 254:
+            click.echo(f"  {Fore.RED}✗ Plugin cap reached ({slot_count}/255)!{Style.RESET_ALL}")
+        elif slot_count >= 240:
+            click.echo(f"  {Fore.YELLOW}⚠ Approaching plugin cap ({slot_count}/255){Style.RESET_ALL}")
+        else:
+            click.echo(f"  {Fore.GREEN}✓ Plugin slot usage is healthy{Style.RESET_ALL}")
+
+        # FO4 rule validation
+        if load_order:
+            issues = Fallout4Rules.validate_load_order(load_order)
+            err_count = len(issues.get('errors', []))
+            warn_count = len(issues.get('warnings', []))
+            if err_count:
+                click.echo(f"  {Fore.RED}✗ {err_count} load-order error(s) detected{Style.RESET_ALL}")
+            elif warn_count:
+                click.echo(f"  {Fore.YELLOW}⚠ {warn_count} warning(s) detected{Style.RESET_ALL}")
+            else:
+                click.echo(f"  {Fore.GREEN}✓ Load order validation passed{Style.RESET_ALL}")
+
+    # ── Orphaned mods ─────────────────────────────────────────────────
+    orphaned = mo2.scan_orphaned_mods()
+    if orphaned:
+        click.echo(f"\n{Fore.YELLOW}Orphaned mods ({len(orphaned)}) — not in any profile:{Style.RESET_ALL}")
+        for m in orphaned[:5]:
+            click.echo(f"  • {m}")
+        if len(orphaned) > 5:
+            click.echo(f"  … and {len(orphaned) - 5} more")
+    else:
+        click.echo(f"\n{Fore.GREEN}✓ No orphaned mods found.{Style.RESET_ALL}")
+
+    # ── AI quick scan ─────────────────────────────────────────────────
+    if target_profile and load_order:
+        click.echo(f"\n{Fore.CYAN}AI Quick Scan:{Style.RESET_ALL}")
+        brain = ModAIBrain()
+        recs = brain.recommend(load_order)
+        critical = [r for r in recs if r["priority"] == 1]
+        high     = [r for r in recs if r["priority"] == 2]
+        if critical:
+            click.echo(f"  {Fore.RED}✗ {len(critical)} critical issue(s) — run 'mossy ai analyze' for details{Style.RESET_ALL}")
+        elif high:
+            click.echo(f"  {Fore.YELLOW}⚠ {len(high)} high-priority recommendation(s){Style.RESET_ALL}")
+        else:
+            click.echo(f"  {Fore.GREEN}✓ AI finds no critical issues{Style.RESET_ALL}")
+
+    click.echo(f"\n{Fore.CYAN}─ Run 'mossy ai analyze' for a full AI report ─{Style.RESET_ALL}\n")
 
 
 if __name__ == '__main__':

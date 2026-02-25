@@ -253,3 +253,68 @@ class LoadOrderManager:
                           if not p.is_master and not p.is_light),
         }
         return stats
+
+    def suggest_esl_candidates(
+        self, mods_path: Optional[Path] = None, size_limit_kb: int = 512
+    ) -> List[Dict]:
+        """
+        Identify ``.esp`` plugins that could potentially be ESL-flagged to
+        free up plugin slots (Fallout 4's 255-slot cap).
+
+        The heuristic uses file size: plugins under *size_limit_kb* KB are
+        usually small enough to fall within the ESL record limit of 2048
+        new Form IDs.  The suggestion is advisory — users should verify with
+        xEdit before flagging.
+
+        Parameters
+        ----------
+        mods_path : Path, optional
+            Root of the MO2 ``mods/`` directory.  When provided, the actual
+            ``.esp`` file is located and its size is measured.
+        size_limit_kb : int
+            File-size threshold in kilobytes (default 512 KB).
+
+        Returns
+        -------
+        list of dict
+            Each entry has keys ``plugin``, ``size_kb`` (or ``None`` when
+            the file was not found), and ``reason``.
+        """
+        candidates = []
+        size_limit_bytes = size_limit_kb * 1024
+
+        for name, plugin in self.plugins.items():
+            # Only regular .esp plugins count toward the 255-slot cap
+            if plugin.is_master or plugin.is_light:
+                continue
+            if not name.lower().endswith(".esp"):
+                continue
+
+            size_bytes: Optional[int] = None
+            if mods_path:
+                # Search one level deep inside each mod folder
+                mods_root = Path(mods_path)
+                for mod_dir in mods_root.iterdir():
+                    candidate_file = mod_dir / name
+                    if candidate_file.is_file():
+                        size_bytes = candidate_file.stat().st_size
+                        break
+
+            qualifies = size_bytes is None or size_bytes <= size_limit_bytes
+
+            if qualifies:
+                size_kb = round(size_bytes / 1024, 1) if size_bytes is not None else None
+                reason = (
+                    f"File size {size_kb} KB ≤ {size_limit_kb} KB limit"
+                    if size_kb is not None
+                    else "File size unknown — verify manually before ESL-flagging"
+                )
+                candidates.append({
+                    "plugin": name,
+                    "size_kb": size_kb,
+                    "reason": reason,
+                })
+
+        # Sort: known-small first, then unknowns
+        candidates.sort(key=lambda c: (c["size_kb"] is None, c["size_kb"] or 0))
+        return candidates

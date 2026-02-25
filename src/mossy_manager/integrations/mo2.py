@@ -355,3 +355,36 @@ class MO2Integration:
         }
         
         return info
+
+    def scan_orphaned_mods(self) -> List[str]:
+        """
+        Find mods present in the ``mods/`` folder that are not referenced in
+        any profile's ``modlist.txt``.
+
+        A mod is considered "orphaned" when it exists on disk but no profile
+        has ever added it to its modlist (enabled *or* disabled).  These are
+        safe to review for removal to reclaim disk space.
+
+        Returns
+        -------
+        list of str
+            Mod directory names that are orphaned.
+        """
+        if not self.mods_path or not self.mods_path.exists():
+            return []
+
+        # Collect every mod name from every profile's modlist.txt
+        referenced: set = set()
+        for profile in self.list_profiles():
+            modlist = self.read_modlist_txt(profile)
+            referenced.update(modlist.keys())
+
+        # Every subdirectory in mods/ is an installed mod
+        orphaned = []
+        for entry in sorted(self.mods_path.iterdir()):
+            if entry.is_dir() and entry.name not in referenced:
+                orphaned.append(entry.name)
+
+        logger.info(f"Orphaned mod scan: {len(orphaned)} orphaned out of "
+                    f"{sum(1 for e in self.mods_path.iterdir() if e.is_dir())} total")
+        return orphaned
