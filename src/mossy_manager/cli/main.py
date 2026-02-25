@@ -25,6 +25,7 @@ from mossy_manager.integrations.mo2 import MO2Integration
 from mossy_manager.games.fallout4 import Fallout4Rules
 from mossy_manager.config_manager import ConfigManager
 from mossy_manager.webui.app import app as web_app
+from mossy_manager.ai.brain import ModAIBrain
 
 # Initialize colorama for cross-platform colored output
 init(autoreset=True)
@@ -1159,6 +1160,203 @@ def info():
 
 {Fore.YELLOW}Note:{Style.RESET_ALL} This tool is designed for use with Mod Organizer 2 (Fallout 4)
     """)
+
+
+
+
+# ============================================================
+# AI command group
+# ============================================================
+
+@main.group()
+def ai():
+    """AI-powered analysis and recommendations (machine learning brain)"""
+    pass
+
+
+@ai.command('analyze')
+@click.option('--plugins-file', '-p', type=click.Path(exists=True),
+              help='Path to plugins.txt file')
+@click.option('--mo2-path', '-m', type=click.Path(),
+              help='Path to Mod Organizer 2 installation (auto-detect if omitted)')
+@click.option('--profile', type=str, default=None,
+              help='MO2 profile name (uses plugins.txt if omitted)')
+@click.option('--output', '-o', type=click.Path(),
+              help='Save full JSON report to this file')
+def ai_analyze(plugins_file, mo2_path, profile, output):
+    """
+    Run a full AI analysis of your Fallout 4 load order.
+
+    Combines conflict-risk prediction, anomaly detection, category
+    clustering and the built-in Fallout 4 rule engine to produce a
+    prioritised, plain-English recommendation list.
+    """
+    click.echo(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════╗")
+    click.echo(f"║     Mossy Manager — AI Brain (Machine Learning)  ║")
+    click.echo(f"╚══════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+
+    # ── Collect load order ────────────────────────────────────────────
+    load_order = []
+    if plugins_file:
+        mgr = LoadOrderManager()
+        mgr.load_plugins_txt(Path(plugins_file))
+        load_order = mgr.get_load_order()
+    elif mo2_path or profile:
+        if mo2_path:
+            mo2 = MO2Integration(Path(mo2_path))
+        else:
+            detected = MO2Integration.detect_mo2_installation()
+            if not detected:
+                click.echo(f"{Fore.RED}✗ Could not detect MO2. Specify --mo2-path.{Style.RESET_ALL}")
+                return
+            mo2 = MO2Integration(detected)
+        if profile:
+            load_order = mo2.read_loadorder_txt(profile)
+
+    if not load_order:
+        click.echo(f"{Fore.YELLOW}⚠ No plugins loaded. Specify --plugins-file or --mo2-path + --profile.{Style.RESET_ALL}")
+        return
+
+    click.echo(f"Analysing {Fore.GREEN}{len(load_order)}{Style.RESET_ALL} plugins with AI brain…\n")
+
+    brain = ModAIBrain()
+    report = brain.full_analysis(load_order)
+
+    # ── Print risk summary ────────────────────────────────────────────
+    rs = report.get("risk_summary", {})
+    click.echo(f"{Fore.CYAN}Risk Summary:{Style.RESET_ALL}")
+    colour = {
+        "critical": Fore.RED,
+        "high": Fore.YELLOW,
+        "medium": Fore.WHITE,
+        "low": Fore.GREEN,
+    }
+    for level in ("critical", "high", "medium", "low"):
+        count = rs.get(level, 0)
+        c = colour.get(level, "")
+        click.echo(f"  {c}{level.capitalize():8s}{Style.RESET_ALL} {count}")
+
+    # ── Print anomalies ───────────────────────────────────────────────
+    anomalies = report.get("anomalies", {}).get("anomalies", [])
+    if anomalies:
+        click.echo(f"\n{Fore.YELLOW}Load-Order Anomalies ({len(anomalies)}):{Style.RESET_ALL}")
+        for a in anomalies[:5]:
+            click.echo(f"  • [{a['position']:3d}] {a['plugin']}")
+            click.echo(f"        {Fore.YELLOW}{a['reason']}{Style.RESET_ALL}")
+        if len(anomalies) > 5:
+            click.echo(f"  … and {len(anomalies) - 5} more")
+
+    # ── Print recommendations ─────────────────────────────────────────
+    recs = report.get("recommendations", [])
+    if recs:
+        click.echo(f"\n{Fore.CYAN}AI Recommendations ({len(recs)}):{Style.RESET_ALL}")
+        for r in recs[:10]:
+            p = r.get("priority", 4)
+            c = Fore.RED if p == 1 else (Fore.YELLOW if p == 2 else
+                (Fore.WHITE if p == 3 else Fore.CYAN))
+            badge = {1: "CRITICAL", 2: "HIGH", 3: "MEDIUM", 4: "INFO"}.get(p, "INFO")
+            click.echo(f"  {c}[{badge}]{Style.RESET_ALL} {r['message']}")
+            detail = r.get("ai_detail", "")
+            if detail:
+                click.echo(f"         {detail}")
+        if len(recs) > 10:
+            click.echo(f"  … and {len(recs) - 10} more (use --output to see all)")
+
+    # ── Cluster summary ───────────────────────────────────────────────
+    clusters = report.get("clusters", {}).get("summary", {})
+    if clusters:
+        click.echo(f"\n{Fore.CYAN}Plugin Clusters:{Style.RESET_ALL}")
+        for cid, desc in list(clusters.items())[:6]:
+            click.echo(f"  • {desc}")
+
+    # ── Optionally save JSON ──────────────────────────────────────────
+    if output:
+        try:
+            Path(output).write_text(json.dumps(report, indent=2, default=str))
+            click.echo(f"\n{Fore.GREEN}✓ Full report saved to: {output}{Style.RESET_ALL}")
+        except Exception as exc:
+            click.echo(f"{Fore.RED}✗ Could not write report: {exc}{Style.RESET_ALL}")
+
+    click.echo(f"\n{Fore.GREEN}✓ AI analysis complete.{Style.RESET_ALL}\n")
+
+
+@ai.command('score')
+@click.argument('plugin_a')
+@click.argument('plugin_b')
+def ai_score(plugin_a, plugin_b):
+    """
+    Score the compatibility between two plugins.
+
+    Example:
+      mossy ai score WeaponOverhaul.esp ArmorMod.esp
+    """
+    brain = ModAIBrain()
+    score = brain.score_compatibility(plugin_a, plugin_b)
+    pct = int(score * 100)
+    if pct >= 75:
+        colour = Fore.GREEN
+        verdict = "Likely compatible"
+    elif pct >= 40:
+        colour = Fore.YELLOW
+        verdict = "May conflict — check manually"
+    else:
+        colour = Fore.RED
+        verdict = "High conflict risk"
+
+    click.echo(f"\nCompatibility: {colour}{pct}%{Style.RESET_ALL}  —  {verdict}")
+    click.echo(f"  {plugin_a}  ↔  {plugin_b}\n")
+
+
+@ai.command('risk')
+@click.argument('plugin_name')
+@click.option('--files', '-f', multiple=True,
+              help='Files in the mod (repeat flag for multiple)')
+def ai_risk(plugin_name, files):
+    """
+    Predict conflict-risk severity for a plugin.
+
+    Example:
+      mossy ai risk MyMod.esp --files scripts/myscript.pex --files textures/thing.dds
+    """
+    brain = ModAIBrain()
+    result = brain.predict_conflict_risk(plugin_name, list(files) if files else None)
+
+    colour = {
+        "critical": Fore.RED,
+        "high": Fore.YELLOW,
+        "medium": Fore.WHITE,
+        "low": Fore.GREEN,
+    }.get(result["severity"], Fore.WHITE)
+
+    click.echo(f"\nConflict Risk: {colour}{result['severity'].upper()}{Style.RESET_ALL}")
+    click.echo(f"  {result['explanation']}")
+    click.echo(f"\nProbabilities:")
+    for label, prob in sorted(result["probabilities"].items()):
+        bar = "█" * int(prob * 20)
+        click.echo(f"  {label:8s} {bar:<20s} {int(prob * 100):3d}%")
+    click.echo()
+
+
+@ai.command('learn')
+@click.argument('plugin_name')
+@click.argument('severity', type=click.Choice(['low', 'medium', 'high', 'critical']))
+@click.option('--files', '-f', multiple=True,
+              help='Files in the mod (repeat for multiple)')
+@click.option('--model-dir', type=click.Path(),
+              default='./mossy_ai_model',
+              help='Directory to persist the updated model')
+def ai_learn(plugin_name, severity, files, model_dir):
+    """
+    Teach the AI the actual severity for a mod.
+
+    This improves future predictions.  Example:
+      mossy ai learn WeaponMod.esp high --files scripts/weapon.pex
+    """
+    brain = ModAIBrain(model_path=Path(model_dir))
+    brain.learn_from_outcome(plugin_name, list(files) if files else None, severity)
+    saved = brain.save(Path(model_dir))
+    click.echo(f"\n{Fore.GREEN}✓ AI brain updated and saved to: {saved}{Style.RESET_ALL}")
+    click.echo(f"  '{plugin_name}' → severity={severity}\n")
 
 
 if __name__ == '__main__':

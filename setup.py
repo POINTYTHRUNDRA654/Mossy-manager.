@@ -37,6 +37,8 @@ setup(
         "pydantic>=2.8.0",
         "fastapi>=0.115.0",
         "uvicorn>=0.30.0",
+        "scikit-learn>=1.3.0",
+        "numpy>=1.24.0",
     ],
     extras_require={
         "dev": [
