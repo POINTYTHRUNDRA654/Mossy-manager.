@@ -43,12 +43,12 @@ class XEditIntegration:
             'oblivion': 'TES4Edit.exe',
         }
         
-    def detect_xedit(self, game: str = 'skyrimse', search_roots: Optional[List[Path]] = None) -> Optional[Path]:
+    def detect_xedit(self, game: str = 'fallout4', search_roots: Optional[List[Path]] = None) -> Optional[Path]:
         """
         Try to detect xEdit installation
         
         Args:
-            game: Game name (skyrim, skyrimse, fallout4, etc.)
+            game: Game name (fallout4)
             
         Returns:
             Path to xEdit executable if found, None otherwise

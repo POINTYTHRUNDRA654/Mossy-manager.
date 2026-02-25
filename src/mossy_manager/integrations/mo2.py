@@ -32,6 +32,12 @@ class MO2Integration:
         Path.home() / 'ModOrganizer',
         Path('C:/Modding/ModOrganizer2'),
         Path('C:/Games/ModOrganizer2'),
+        # Steam-library / Nexus Mod Manager common locations
+        Path('C:/Games/Mod Organizer 2'),
+        Path('C:/Modding/MO2'),
+        Path(os.environ.get('LOCALAPPDATA', 'C:/Users/Default/AppData/Local')) / 'ModOrganizer',
+        Path(os.environ.get('PROGRAMFILES', 'C:/Program Files')) / 'Mod Organizer 2',
+        Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Mod Organizer 2',
     ]
     
     def __init__(self, mo2_path: Optional[Path] = None):

@@ -38,6 +38,8 @@ class ConfigManager:
             "mo2_path": "",
             "default_profile": "",
             "auto_backup": "false",
+            "game": "fallout4",
+            "game_path": "",
             "xedit_path": "",
             "bsarch_path": "",
         }

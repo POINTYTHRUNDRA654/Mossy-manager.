@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 @click.group()
-@click.version_option(version="0.1.0")
+@click.version_option(version="1.0.0")
 @click.option('--verbose', '-v', is_flag=True, # The above code is a Python comment. It starts with a
 # `#` symbol, which indicates that the following text
 # is a comment and will not be executed as code. In
@@ -367,8 +367,8 @@ def scan_conflicts(mods_dir, output):
               help='Path to Mod Organizer 2 (used to locate bundled tools)')
 @click.option('--xedit-path', '-x', type=click.Path(exists=True),
               help='Path to xEdit executable (SSEEdit.exe, TES5Edit.exe, etc.)')
-@click.option('--game', '-g', default='skyrimse',
-              help='Game type (skyrimse, skyrim, fallout4, etc.)')
+@click.option('--game', '-g', default='fallout4',
+              help='Game type (fallout4)')
 @click.option('--patch-name', '-p', default='MossyManager_ConflictPatch',
               help='Name for the conflict resolution patch')
 @click.option('--output-dir', '-o', type=click.Path(),
@@ -646,8 +646,8 @@ def apply_patch(patch_file, mod_dir, dry_run):
 @click.option('--description', '-d', default='', help='Patch description')
 @click.option('--xedit-path', '-x', type=click.Path(exists=True),
               help='Path to xEdit executable')
-@click.option('--game', '-g', default='skyrimse',
-              help='Game type (skyrimse, fallout4, etc.)')
+@click.option('--game', '-g', default='fallout4',
+              help='Game type (fallout4)')
 @click.option('--target-plugin', '-t',
               help='Target plugin name (e.g., MyPatch.esp)')
 @click.option('--output-dir', '-o', type=click.Path(),
@@ -1122,33 +1122,42 @@ def info():
 ║           MOSSY MANAGER - MO2 Management Tool            ║
 ╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}
 
-{Fore.GREEN}Version:{Style.RESET_ALL} 0.1.0
+{Fore.GREEN}Version:{Style.RESET_ALL} 1.0.0
+{Fore.GREEN}Game:{Style.RESET_ALL} Fallout 4
 
 {Fore.CYAN}Features:{Style.RESET_ALL}
-  • Load Order Management - Organize and optimize plugin load order
+  • Load Order Management - Organize and optimize Fallout 4 plugin load order
   • Conflict Resolution - Detect and analyze mod conflicts
   • Patching System - Create and apply compatibility patches
+  • xEdit Integration - Launch FO4Edit for advanced conflict resolution
+  • Web UI - Browser-based LOOT-style interface (mossy ui)
 
 {Fore.CYAN}Commands:{Style.RESET_ALL}
-  loadorder  - Manage plugin load order
-  conflicts  - Detect and resolve mod conflicts
-  patch      - Create and apply patches
-  info       - Display this information
+  loadorder      - Manage plugin load order (list, validate, optimize, auto-fo4)
+  conflicts      - Detect and resolve mod conflicts (scan, resolve-xedit)
+  patch          - Create and apply patches (create, list, apply, create-xedit)
+  fallout4       - Fallout 4 specific commands (optimize)
+  auto           - Complete automatic workflow: optimize + conflict detection
+  ui             - Launch the local web UI
+  info           - Display this information
 
 {Fore.CYAN}Quick Start:{Style.RESET_ALL}
-  1. List load order:
-     mossy loadorder list --plugins-file path/to/plugins.txt
-  
+  1. Auto-optimize Fallout 4 load order:
+     mossy loadorder auto-fo4 --profile "Default"
+
   2. Scan for conflicts:
      mossy conflicts scan --mods-dir path/to/mods
-  
-  3. Create a patch:
-     mossy patch create --name "MyPatch" --description "Fixes compatibility"
+
+  3. Full automatic workflow:
+     mossy auto --profile "Default" --apply
+
+  4. Launch web UI:
+     mossy ui
 
 {Fore.CYAN}Documentation:{Style.RESET_ALL}
   https://github.com/POINTYTHRUNDRA654/Mossy-manager.
 
-{Fore.YELLOW}Note:{Style.RESET_ALL} This tool is designed for use with Mod Organizer 2
+{Fore.YELLOW}Note:{Style.RESET_ALL} This tool is designed for use with Mod Organizer 2 (Fallout 4)
     """)
 
 
