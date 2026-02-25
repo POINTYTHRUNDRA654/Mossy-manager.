@@ -27,6 +27,8 @@ from mossy_manager.games.fallout4 import Fallout4Rules
 from mossy_manager.config_manager import ConfigManager
 from mossy_manager.webui.app import app as web_app
 from mossy_manager.ai.brain import ModAIBrain
+from mossy_manager.ai.reasoner import ModReasoner
+from mossy_manager.ai.script_writer import ScriptWriter
 
 # Initialize colorama for cross-platform colored output
 init(autoreset=True)
@@ -1358,6 +1360,200 @@ def ai_learn(plugin_name, severity, files, model_dir):
     saved = brain.save(Path(model_dir))
     click.echo(f"\n{Fore.GREEN}✓ AI brain updated and saved to: {saved}{Style.RESET_ALL}")
     click.echo(f"  '{plugin_name}' → severity={severity}\n")
+
+
+@ai.command('reason')
+@click.option('--plugins-file', '-p', type=click.Path(exists=True),
+              help='Path to plugins.txt to analyse')
+@click.option('--problem', '-d', default='',
+              help='Free-text problem description (crash, CTD, texture, etc.)')
+@click.option('--output', '-o', type=click.Path(),
+              help='Save full JSON reasoning trace to this file')
+def ai_reason(plugins_file, problem, output):
+    """
+    Advanced chain-of-thought reasoning about your load order or a problem.
+
+    Examples:
+      mossy ai reason --plugins-file plugins.txt
+      mossy ai reason --problem "game crashes on load"
+      mossy ai reason --plugins-file plugins.txt --problem "purple textures"
+    """
+    click.echo(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════╗")
+    click.echo(f"║     Mossy Manager — Advanced Reasoner            ║")
+    click.echo(f"╚══════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+
+    load_order = []
+    if plugins_file:
+        mgr = LoadOrderManager()
+        mgr.load_plugins_txt(Path(plugins_file))
+        load_order = mgr.get_load_order()
+        click.echo(f"Loaded {Fore.GREEN}{len(load_order)}{Style.RESET_ALL} plugins from {plugins_file}\n")
+
+    reasoner = ModReasoner()
+
+    if problem:
+        result = reasoner.diagnose(problem, load_order)
+    elif load_order:
+        result = reasoner.reason_about_load_order(load_order)
+    else:
+        click.echo(f"{Fore.YELLOW}⚠ Provide --plugins-file and/or --problem.{Style.RESET_ALL}")
+        return
+
+    # ── Print steps ───────────────────────────────────────────────────
+    sev_colour = {
+        "critical": Fore.RED,
+        "error":    Fore.RED,
+        "warning":  Fore.YELLOW,
+        "info":     Fore.CYAN,
+    }
+    click.echo(f"{Fore.CYAN}Reasoning trace ({len(result.steps)} step(s)):{Style.RESET_ALL}")
+    for s in result.steps:
+        c = sev_colour.get(s.severity, Fore.WHITE)
+        badge = f"[{s.severity.upper():8s}]"
+        click.echo(f"  {c}{badge}{Style.RESET_ALL} {s.rule}")
+        click.echo(f"    Observed : {s.observation}")
+        click.echo(f"    Concluded: {s.deduction}")
+
+    # ── Conclusion ────────────────────────────────────────────────────
+    overall_c = sev_colour.get(result.severity, Fore.WHITE)
+    click.echo(f"\n{Fore.CYAN}Conclusion:{Style.RESET_ALL}")
+    click.echo(f"  {overall_c}{result.conclusion}{Style.RESET_ALL}")
+    click.echo(f"  Confidence: {int(result.confidence * 100)}%\n")
+
+    # ── Action plan ───────────────────────────────────────────────────
+    if result.action_plan:
+        click.echo(f"{Fore.CYAN}Action Plan:{Style.RESET_ALL}")
+        for i, action in enumerate(result.action_plan, 1):
+            click.echo(f"  {i}. {action}")
+        click.echo()
+
+    # ── Save JSON ─────────────────────────────────────────────────────
+    if output:
+        try:
+            Path(output).write_text(
+                json.dumps(result.to_dict(), indent=2, default=str)
+            )
+            click.echo(f"{Fore.GREEN}✓ Reasoning trace saved to: {output}{Style.RESET_ALL}\n")
+        except Exception as exc:
+            click.echo(f"{Fore.RED}✗ Could not write output: {exc}{Style.RESET_ALL}")
+
+    click.echo(f"{Fore.CYAN}Tip: run 'mossy ai script' to auto-generate fix scripts.{Style.RESET_ALL}\n")
+
+
+@ai.command('script')
+@click.option('--plugins-file', '-p', type=click.Path(exists=True),
+              help='Path to plugins.txt')
+@click.option('--problem', '-d', default='',
+              help='Free-text problem description')
+@click.option('--patch-name', default='MossyAutoFix',
+              help='Name for generated patch plugin (default: MossyAutoFix)')
+@click.option('--type', 'script_type',
+              type=click.Choice([
+                  'conflict_patch', 'clean_itms', 'esl_flag',
+                  'papyrus_logging', 'archive_invalidation',
+                  'performance_high', 'performance_low',
+                  'safe_launch', 'backup_profiles', 'auto',
+              ]),
+              default='auto',
+              help='Script type to generate (default: auto — chosen by AI reasoning)')
+@click.option('--plugins', multiple=True,
+              help='Plugin names for esl_flag / conflict_patch (repeat flag)')
+@click.option('--output-dir', '-o', type=click.Path(),
+              default='./mossy_scripts',
+              help='Directory to write scripts into (default: ./mossy_scripts)')
+def ai_script(plugins_file, problem, patch_name, script_type, plugins, output_dir):
+    """
+    Generate advanced scripts for Fallout 4 mod management.
+
+    Examples:
+      mossy ai script --type conflict_patch --patch-name MyFix --plugins ModA.esp ModB.esp
+      mossy ai script --type papyrus_logging
+      mossy ai script --type safe_launch
+      mossy ai script --plugins-file plugins.txt --problem "CTD on load" --type auto
+    """
+    click.echo(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════╗")
+    click.echo(f"║     Mossy Manager — Script Writer                ║")
+    click.echo(f"╚══════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+
+    writer = ScriptWriter(output_dir=Path(output_dir))
+    out_dir = Path(output_dir)
+    written: list = []
+
+    # ── Auto mode: reason first, then generate ────────────────────────
+    if script_type == 'auto':
+        load_order: list = []
+        if plugins_file:
+            mgr = LoadOrderManager()
+            mgr.load_plugins_txt(Path(plugins_file))
+            load_order = mgr.get_load_order()
+
+        reasoner = ModReasoner()
+        if problem:
+            reasoning = reasoner.diagnose(problem, load_order)
+        elif load_order:
+            reasoning = reasoner.reason_about_load_order(load_order)
+        else:
+            click.echo(f"{Fore.YELLOW}⚠ In auto mode provide --plugins-file and/or --problem.{Style.RESET_ALL}")
+            return
+
+        scripts = writer.from_reasoning(
+            reasoning,
+            patch_name=patch_name,
+            plugins=list(plugins) if plugins else None,
+        )
+        written = writer.write_all(scripts, out_dir)
+
+        click.echo(f"Reasoner found {len(reasoning.steps)} issue(s). "
+                   f"Generated {len(scripts)} script(s):\n")
+        for path in written:
+            click.echo(f"  {Fore.GREEN}✓{Style.RESET_ALL} {path}")
+
+    # ── Explicit xEdit scripts ─────────────────────────────────────────
+    elif script_type == 'conflict_patch':
+        content = writer.xedit_conflict_patch(patch_name, list(plugins))
+        p = writer.write(f"{patch_name}_conflict_patch.pas", content, out_dir)
+        written = [p]
+
+    elif script_type == 'clean_itms':
+        if not plugins:
+            click.echo(f"{Fore.RED}✗ --plugins required for clean_itms{Style.RESET_ALL}")
+            return
+        for plugin_name in plugins:
+            content = writer.xedit_clean_itms(plugin_name)
+            p = writer.write(f"{plugin_name}_clean_itms.pas", content, out_dir)
+            written.append(p)
+
+    elif script_type == 'esl_flag':
+        if not plugins:
+            click.echo(f"{Fore.RED}✗ --plugins required for esl_flag{Style.RESET_ALL}")
+            return
+        content = writer.xedit_esl_flag(list(plugins))
+        p = writer.write(f"{patch_name}_esl_flag.pas", content, out_dir)
+        written = [p]
+
+    # ── INI tweaks ────────────────────────────────────────────────────
+    elif script_type in ('papyrus_logging', 'archive_invalidation',
+                         'performance_high', 'performance_low'):
+        content = writer.ini_tweak(script_type)
+        p = writer.write(f"{script_type}.ini", content, out_dir)
+        written = [p]
+
+    # ── Batch scripts ─────────────────────────────────────────────────
+    elif script_type == 'safe_launch':
+        content = writer.batch_safe_launch()
+        p = writer.write("safe_launch.bat", content, out_dir)
+        written = [p]
+
+    elif script_type == 'backup_profiles':
+        content = writer.batch_backup_profiles()
+        p = writer.write("backup_profiles.ps1", content, out_dir)
+        written = [p]
+
+    for path in written:
+        click.echo(f"{Fore.GREEN}✓ Script written:{Style.RESET_ALL} {path}")
+
+    if written:
+        click.echo(f"\n{Fore.CYAN}Open the script(s) above to review before use.{Style.RESET_ALL}\n")
 
 
 # ============================================================
