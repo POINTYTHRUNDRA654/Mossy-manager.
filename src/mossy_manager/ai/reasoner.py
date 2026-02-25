@@ -327,6 +327,71 @@ class _Rules:
         return steps
 
     @staticmethod
+    def rule_missing_master(
+        load_order: List[str], step_offset: int
+    ) -> List[ReasoningStep]:
+        """
+        Use PluginDependencyGraph to detect:
+        (a) masters absent from the load order entirely, and
+        (b) plugins that load BEFORE their required master.
+        """
+        try:
+            from mossy_manager.core.dependency_graph import PluginDependencyGraph
+        except ImportError:
+            return []
+
+        graph = PluginDependencyGraph.from_load_order(load_order)
+        steps: List[ReasoningStep] = []
+        n = step_offset
+        seen: set = set()
+
+        # (a) Missing from load order
+        for plugin, master in graph.get_missing_masters(load_order):
+            key = (plugin, master)
+            if key in seen:
+                continue
+            seen.add(key)
+            n += 1
+            steps.append(ReasoningStep(
+                step_number=n,
+                rule="MissingMaster",
+                observation=(
+                    f"'{plugin}' requires master '{master}' "
+                    "which is absent from the load order"
+                ),
+                deduction=(
+                    f"Install '{master}' and ensure it loads before '{plugin}'. "
+                    "A missing master causes an instant crash on game start."
+                ),
+                severity="critical",
+                plugin=plugin,
+            ))
+
+        # (b) Load-order violations (plugin before its master)
+        for plugin, master, p_pos, m_pos in graph.get_load_order_violations(load_order):
+            key = f"viol_{plugin}_{master}"
+            if key in seen:
+                continue
+            seen.add(key)
+            n += 1
+            steps.append(ReasoningStep(
+                step_number=n,
+                rule="MasterLoadedLate",
+                observation=(
+                    f"'{plugin}' is at position {p_pos} but its master "
+                    f"'{master}' is at position {m_pos} — master loads after plugin"
+                ),
+                deduction=(
+                    f"Move '{master}' to before '{plugin}' in the load order. "
+                    "Masters must always precede every plugin that depends on them."
+                ),
+                severity="critical",
+                plugin=plugin,
+            ))
+
+        return steps
+
+    @staticmethod
     def rule_f4se_check(
         load_order: List[str], step_offset: int
     ) -> List[ReasoningStep]:
@@ -422,8 +487,12 @@ class ModReasoner:
         steps = _Rules.rule_plugin_cap(load_order, offset)
         all_steps.extend(steps); offset = len(all_steps)
 
-        # Rule 3 — missing dependency
+        # Rule 3 — missing dependency (heuristic name-based)
         steps = _Rules.rule_dependency_check(load_order, offset)
+        all_steps.extend(steps); offset = len(all_steps)
+
+        # Rule 3b — missing master / load-order violation (graph-based)
+        steps = _Rules.rule_missing_master(load_order, offset)
         all_steps.extend(steps); offset = len(all_steps)
 
         # Rule 4 — unofficial patch

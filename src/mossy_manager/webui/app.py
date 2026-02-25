@@ -14,6 +14,7 @@ from mossy_manager.config_manager import ConfigManager
 from mossy_manager.core.conflict_resolver import ConflictResolver
 from mossy_manager.games.fallout4 import Fallout4Rules
 from mossy_manager.integrations.mo2 import MO2Integration
+from mossy_manager.utils.health_checker import ModHealthChecker
 from mossy_manager.utils.xedit_integration import XEditIntegration
 
 
@@ -194,6 +195,45 @@ def build_app() -> FastAPI:
     @app.get("/health")
     def health():
         return {"status": "ok"}
+
+    @app.get("/api/health")
+    def api_health(
+        profile: Optional[str] = None,
+        mo2_path: Optional[str] = None,
+        run_ai: bool = True,
+    ):
+        """
+        Run ``ModHealthChecker`` against the specified profile and return a
+        scored health report (0–100).
+
+        Query parameters
+        ----------------
+        profile : str
+            MO2 profile name (required when mo2_path is supplied).
+        mo2_path : str, optional
+            Path to MO2 installation.  Auto-detected when omitted.
+        run_ai : bool
+            Set to ``false`` to skip the AI brain analysis (faster).
+        """
+        mo2 = None
+        load_order: list = []
+        if mo2_path or profile:
+            try:
+                mo2 = _ensure_mo2(mo2_path)
+                if profile and profile in mo2.list_profiles():
+                    load_order = mo2.read_loadorder_txt(profile)
+            except HTTPException:
+                pass
+
+        if not load_order:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide profile + mo2_path (or auto-detect) to run a health check."
+            )
+
+        checker = ModHealthChecker(run_ai=run_ai)
+        report = checker.check(load_order, profile=profile, mo2=mo2)
+        return report.to_dict()
 
     # ── AI Brain endpoints ──────────────────────────────────────────────
 

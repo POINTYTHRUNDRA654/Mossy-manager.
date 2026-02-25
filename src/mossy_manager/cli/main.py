@@ -22,6 +22,7 @@ from mossy_manager.core.conflict_resolver import ConflictResolver
 from mossy_manager.core.patcher import Patcher
 from mossy_manager.utils.xedit_integration import XEditIntegration
 from mossy_manager.utils.backup_manager import BackupManager
+from mossy_manager.utils.health_checker import ModHealthChecker
 from mossy_manager.integrations.mo2 import MO2Integration
 from mossy_manager.games.fallout4 import Fallout4Rules
 from mossy_manager.config_manager import ConfigManager
@@ -1753,14 +1754,21 @@ def backup_cleanup(profile, keep, backups_dir):
 @main.command('status')
 @click.option('--mo2-path', '-m', type=click.Path(), help='Path to MO2 installation')
 @click.option('--profile', '-p', default=None, help='Profile to analyse (optional)')
-def status(mo2_path, profile):
+@click.option('--json', 'output_json', is_flag=True, default=False,
+              help='Output health report as JSON')
+@click.option('--no-ai', is_flag=True, default=False,
+              help='Skip AI brain analysis (faster)')
+def status(mo2_path, profile, output_json, no_ai):
     """
     One-shot health check: MO2 installation, profile summary,
-    plugin cap, orphaned mods, and AI quick-scan.
+    plugin cap, dependency issues, orphaned mods, and AI quick-scan.
+
+    Uses ModHealthChecker to produce a scored health report (0-100).
     """
-    click.echo(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════╗")
-    click.echo(f"║         Mossy Manager — Status Report            ║")
-    click.echo(f"╚══════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    if not output_json:
+        click.echo(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════╗")
+        click.echo(f"║         Mossy Manager — Status Report            ║")
+        click.echo(f"╚══════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
 
     # ── MO2 detection ─────────────────────────────────────────────────
     if mo2_path:
@@ -1769,76 +1777,77 @@ def status(mo2_path, profile):
         detected = MO2Integration.detect_mo2_installation()
         mo2 = MO2Integration(detected) if detected else MO2Integration()
 
-    if mo2.mo2_path:
-        click.echo(f"{Fore.GREEN}✓ MO2:{Style.RESET_ALL} {mo2.mo2_path}")
-    else:
-        click.echo(f"{Fore.YELLOW}⚠ MO2 not detected — use --mo2-path to specify.{Style.RESET_ALL}")
+    if not output_json:
+        if mo2.mo2_path:
+            click.echo(f"{Fore.GREEN}✓ MO2:{Style.RESET_ALL} {mo2.mo2_path}")
+        else:
+            click.echo(f"{Fore.YELLOW}⚠ MO2 not detected — use --mo2-path to specify.{Style.RESET_ALL}")
 
     profiles = mo2.list_profiles()
-    click.echo(f"  Profiles: {len(profiles)}")
-    for p in profiles[:5]:
-        click.echo(f"    • {p}")
-    if len(profiles) > 5:
-        click.echo(f"    … and {len(profiles) - 5} more")
+    if not output_json:
+        click.echo(f"  Profiles: {len(profiles)}")
+        for p in profiles[:5]:
+            click.echo(f"    • {p}")
+        if len(profiles) > 5:
+            click.echo(f"    … and {len(profiles) - 5} more")
 
-    # ── Profile detail ────────────────────────────────────────────────
+    # ── Load the target profile ───────────────────────────────────────
     target_profile = profile or (profiles[0] if profiles else None)
+    load_order = []
     if target_profile:
-        click.echo(f"\n{Fore.CYAN}Profile: {target_profile}{Style.RESET_ALL}")
         load_order = mo2.read_loadorder_txt(target_profile)
-        plugins_enabled = mo2.read_plugins_txt(target_profile)
 
-        enabled_count = sum(1 for v in plugins_enabled.values() if v)
-        slot_count = sum(1 for p in load_order if not p.lower().endswith(".esl"))
-
-        click.echo(f"  Plugins in load order: {len(load_order)}")
-        click.echo(f"  Enabled: {enabled_count}  |  Slot usage: {slot_count}/255")
-
-        if slot_count >= 254:
-            click.echo(f"  {Fore.RED}✗ Plugin cap reached ({slot_count}/255)!{Style.RESET_ALL}")
-        elif slot_count >= 240:
-            click.echo(f"  {Fore.YELLOW}⚠ Approaching plugin cap ({slot_count}/255){Style.RESET_ALL}")
+    if not load_order:
+        if output_json:
+            click.echo(json.dumps({"error": "No load order found", "score": 0}))
         else:
-            click.echo(f"  {Fore.GREEN}✓ Plugin slot usage is healthy{Style.RESET_ALL}")
+            click.echo(f"\n{Fore.YELLOW}⚠ No load order found. Specify --mo2-path and --profile.{Style.RESET_ALL}\n")
+        return
 
-        # FO4 rule validation
-        if load_order:
-            issues = Fallout4Rules.validate_load_order(load_order)
-            err_count = len(issues.get('errors', []))
-            warn_count = len(issues.get('warnings', []))
-            if err_count:
-                click.echo(f"  {Fore.RED}✗ {err_count} load-order error(s) detected{Style.RESET_ALL}")
-            elif warn_count:
-                click.echo(f"  {Fore.YELLOW}⚠ {warn_count} warning(s) detected{Style.RESET_ALL}")
-            else:
-                click.echo(f"  {Fore.GREEN}✓ Load order validation passed{Style.RESET_ALL}")
+    # ── Run health checker ────────────────────────────────────────────
+    checker = ModHealthChecker(run_ai=not no_ai)
+    report  = checker.check(load_order, profile=target_profile, mo2=mo2)
 
-    # ── Orphaned mods ─────────────────────────────────────────────────
-    orphaned = mo2.scan_orphaned_mods()
-    if orphaned:
-        click.echo(f"\n{Fore.YELLOW}Orphaned mods ({len(orphaned)}) — not in any profile:{Style.RESET_ALL}")
-        for m in orphaned[:5]:
-            click.echo(f"  • {m}")
-        if len(orphaned) > 5:
-            click.echo(f"  … and {len(orphaned) - 5} more")
+    if output_json:
+        click.echo(json.dumps(report.to_dict(), indent=2))
+        return
+
+    # ── Render coloured report ────────────────────────────────────────
+    score_colour = (
+        Fore.GREEN  if report.score >= 80 else
+        Fore.YELLOW if report.score >= 50 else
+        Fore.RED
+    )
+    click.echo(f"\n{Fore.CYAN}Profile: {target_profile}{Style.RESET_ALL}")
+    click.echo(f"  Plugins   : {report.plugin_count}  "
+               f"(slot usage: {report.slot_count}/255)")
+    click.echo(f"  ESL slots : {report.esl_candidates} plugin(s) could be ESL-flagged")
+    click.echo(f"  Health    : {score_colour}{report.score}/100{Style.RESET_ALL}\n")
+
+    sev_colour = {
+        "critical": Fore.RED,
+        "error":    Fore.RED,
+        "warning":  Fore.YELLOW,
+        "info":     Fore.CYAN,
+    }
+    sev_icon = {
+        "critical": "✗",
+        "error":    "✗",
+        "warning":  "⚠",
+        "info":     "ℹ",
+    }
+    if report.issues:
+        for issue in report.issues:
+            c = sev_colour.get(issue.severity, Fore.WHITE)
+            icon = sev_icon.get(issue.severity, " ")
+            plugin_tag = f" [{issue.plugin}]" if issue.plugin else ""
+            click.echo(f"  {c}{icon} [{issue.severity.upper():8s}]{plugin_tag}{Style.RESET_ALL} "
+                       f"{issue.message[:100]}")
     else:
-        click.echo(f"\n{Fore.GREEN}✓ No orphaned mods found.{Style.RESET_ALL}")
+        click.echo(f"  {Fore.GREEN}✓ No issues found — load order looks healthy!{Style.RESET_ALL}")
 
-    # ── AI quick scan ─────────────────────────────────────────────────
-    if target_profile and load_order:
-        click.echo(f"\n{Fore.CYAN}AI Quick Scan:{Style.RESET_ALL}")
-        brain = ModAIBrain()
-        recs = brain.recommend(load_order)
-        critical = [r for r in recs if r["priority"] == 1]
-        high     = [r for r in recs if r["priority"] == 2]
-        if critical:
-            click.echo(f"  {Fore.RED}✗ {len(critical)} critical issue(s) — run 'mossy ai analyze' for details{Style.RESET_ALL}")
-        elif high:
-            click.echo(f"  {Fore.YELLOW}⚠ {len(high)} high-priority recommendation(s){Style.RESET_ALL}")
-        else:
-            click.echo(f"  {Fore.GREEN}✓ AI finds no critical issues{Style.RESET_ALL}")
-
-    click.echo(f"\n{Fore.CYAN}─ Run 'mossy ai analyze' for a full AI report ─{Style.RESET_ALL}\n")
+    click.echo(f"\n{Fore.CYAN}─ Run 'mossy ai analyze' for a full AI report ─{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}─ Run 'mossy ai fix'     to generate fix scripts ─{Style.RESET_ALL}\n")
 
 
 if __name__ == '__main__':
