@@ -10,11 +10,39 @@
 
 **Want to get started right away?**
 
-1. 📥 **[Download the Latest Release](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases/latest)** - Get the executable (no Python needed!)
+1. 📥 **[Download MossyManager.exe](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases/tag/latest)** - Always-current build, no Python needed!
 2. 📖 **[Read the Quick Start Guide](QUICKSTART.md)** - Get up and running in 5 minutes
 3. 🎮 **Run**: `MossyManager.exe auto --profile "Default"` - Optimize your Fallout 4 setup automatically!
 
 **Need help downloading?** See [HOW_TO_DOWNLOAD.md](HOW_TO_DOWNLOAD.md) for detailed instructions.
+
+## 🎮 Using Mossy Manager inside Mod Organizer 2
+
+Mossy Manager can be launched directly from MO2 so it runs through MO2's virtual
+file system (giving it access to your active mods and profile).
+
+### Step-by-step setup
+
+1. **Download** `MossyManager.exe` from the
+   [latest release](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases/tag/latest).
+2. **Save** it somewhere permanent, e.g. your MO2 `tools\MossyManager\` folder.
+3. Open **Mod Organizer 2**.
+4. Click the **gear icon** (⚙) in the MO2 toolbar → **Executables**.
+5. Click the **+** button to add a new executable and fill in:
+
+   | Field | Value |
+   |-------|-------|
+   | Title | `Mossy Manager` |
+   | Binary | `C:\...\MossyManager.exe` *(browse to where you saved it)* |
+   | Arguments | `auto --profile "Default"` *(replace `Default` with your profile name)* |
+   | Start in | *(leave blank — Mossy Manager auto-detects MO2)* |
+
+6. Click **OK** and close the Executables dialog.
+7. Select **Mossy Manager** from the executable dropdown next to the **Run** button
+   and click **Run**.
+
+Mossy Manager will auto-detect your MO2 installation, optimize your load order,
+scan for conflicts, and print a full report — all without leaving MO2.
 
 ## 🌟 NEW: Fallout 4 Advanced Integration
 

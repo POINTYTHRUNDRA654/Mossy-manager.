@@ -10,10 +10,16 @@ Choose one of these options:
 
 #### Option A: Download Executable (No Python Required!) ⭐ RECOMMENDED
 
-1. Go to the [Releases page](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases)
-2. Download the latest `MossyManager.exe` (Windows) or `MossyManager` (Linux/Mac)
-3. Save it anywhere on your computer
+1. Go to the [latest release](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases/tag/latest)
+2. Click **MossyManager.exe** to download it (Windows) or `MossyManager` (Linux/Mac)
+3. Save it anywhere on your computer (e.g. `C:\Tools\MossyManager\`)
 4. That's it! No installation needed!
+
+**To use inside Mod Organizer 2:**
+- Open MO2 → gear icon (⚙) → Executables → **+**
+- Title: `Mossy Manager`, Binary: path to `MossyManager.exe`
+- Arguments: `auto --profile "Default"`
+- Click OK, then select it from the Run dropdown
 
 #### Option B: Install from Source (For Developers)
 

@@ -8,22 +8,36 @@ This guide explains the different ways to get Mossy Manager and start testing.
 
 **Easiest method - No Python installation required!**
 
+> A pre-built `MossyManager.exe` is always available at the
+> **[latest release](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases/tag/latest)**.
+> It is automatically rebuilt and re-uploaded on every code change, so you
+> always get the most recent version.
+
 #### For Windows:
-1. Go to the [Releases page](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases)
-2. Find the latest release
-3. Download `MossyManager-Windows.exe`
-4. Save it anywhere on your computer
-5. Double-click to run, or use from command line
+1. Go to the [latest release](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases/tag/latest)
+2. Click **MossyManager.exe** to download it
+3. Save it anywhere on your computer (e.g. `C:\Tools\MossyManager\MossyManager.exe`)
+4. Double-click to run, or use from the command line, or [add it to MO2](#adding-to-mod-organizer-2)
+
+#### Adding to Mod Organizer 2
+1. Open **Mod Organizer 2**.
+2. Click the **gear icon** (⚙) in the toolbar → **Executables**.
+3. Click **+** and fill in:
+   - **Title**: `Mossy Manager`
+   - **Binary**: Browse to `MossyManager.exe`
+   - **Arguments**: `auto --profile "Default"` *(change profile name as needed)*
+   - **Start in**: *(leave blank)*
+4. Click **OK**, then select **Mossy Manager** from the Run dropdown and click **Run**.
 
 #### For Linux:
-1. Go to the [Releases page](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases)
+1. Go to the [latest release](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases/tag/latest)
 2. Find the latest release
 3. Download `MossyManager-Linux`
 4. Make it executable: `chmod +x MossyManager-Linux`
 5. Run it: `./MossyManager-Linux --help`
 
 #### For macOS:
-1. Go to the [Releases page](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases)
+1. Go to the [latest release](https://github.com/POINTYTHRUNDRA654/Mossy-manager./releases/tag/latest)
 2. Find the latest release
 3. Download `MossyManager-macOS.dmg`
 4. Open the DMG and copy to Applications

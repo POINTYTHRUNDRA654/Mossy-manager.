@@ -1,0 +1,86 @@
+name: Publish Latest Executable
+
+# Runs on every push to main.
+# Builds MossyManager.exe and updates the "latest" pre-release so users
+# always have a ready-to-download executable without waiting for a tagged
+# version release.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}  # Allow manual trigger from the Actions tab
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build MossyManager.exe
+        run: python build.py
+
+      - name: Upload executable as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MossyManager-Windows-latest
+          path: dist/MossyManager.exe
+
+      # Delete the existing "latest" pre-release and recreate it so the
+      # attached asset is always the most recent build.
+      - name: Delete existing "latest" release (if any)
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>$null
+          if ($LASTEXITCODE -ne 0) { $true }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+
+      - name: Create "latest" pre-release with MossyManager.exe
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest Build (auto-updated)"
+          body: |
+            ## Latest Build
+
+            This release is **automatically updated** on every push to `main`.
+            It always contains the most recent `MossyManager.exe`.
+
+            ### 📥 Download
+            Click **MossyManager.exe** below to download.
+
+            ### 🎮 Adding to Mod Organizer 2
+            1. Download `MossyManager.exe` and save it anywhere (e.g. your MO2 `tools\` folder).
+            2. Open **Mod Organizer 2**.
+            3. Click the **gear icon** (⚙) in the toolbar → **Executables**.
+            4. Click the **+** button to add a new executable.
+            5. Fill in:
+               - **Title**: `Mossy Manager`
+               - **Binary**: Browse to `MossyManager.exe`
+               - **Arguments**: `auto --profile "Default"` *(change profile name as needed)*
+               - **Start in**: *(leave blank — MossyManager detects MO2 automatically)*
+            6. Click **OK** and close the dialog.
+            7. Select **Mossy Manager** from the dropdown next to the Run button and click **Run**.
+
+            ### For versioned/stable releases
+            See the [Releases page](../../releases) for tagged versions.
+          prerelease: true
+          files: dist/MossyManager.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
