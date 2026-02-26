@@ -68,15 +68,34 @@ Mossy Manager now includes **comprehensive Fallout 4 knowledge** and can automat
 
 ### Option 2: From Source
 
+> ⚠️ **Windows users — important note about the folder name:**
+> This repository's name ends with a period (`.`), which Windows does not allow as a
+> folder name. If you clone using GitHub Desktop or download the ZIP and get an
+> **empty folder**, this is why. Use the workaround below.
+
+#### Windows Workaround (clone via Command Prompt):
+
+```cmd
+git clone https://github.com/POINTYTHRUNDRA654/Mossy-manager. MossyManager
+cd MossyManager
+install.bat
+```
+
+The extra `MossyManager` argument tells Git to use a valid Windows folder name.
+`install.bat` then installs all dependencies and sets up the tool automatically.
+
+#### Linux / macOS:
+
 ```bash
-# Clone the repository
-git clone https://github.com/POINTYTHRUNDRA654/Mossy-manager.
-cd Mossy-manager.
+git clone https://github.com/POINTYTHRUNDRA654/Mossy-manager. MossyManager
+cd MossyManager
+./install.sh
+```
 
-# Install dependencies
+#### Manual install (all platforms):
+
+```bash
 pip install -r requirements.txt
-
-# Install the package
 pip install -e .
 ```
 

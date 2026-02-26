@@ -17,15 +17,25 @@ Choose one of these options:
 
 #### Option B: Install from Source (For Developers)
 
+> ⚠️ **Windows users:** The repo name ends with a `.` which Windows does not allow as a
+> folder name. Clone from Command Prompt with a custom folder name:
+>
+> ```cmd
+> git clone https://github.com/POINTYTHRUNDRA654/Mossy-manager. MossyManager
+> cd MossyManager
+> install.bat
+> ```
+
 ```bash
-# Clone the repository
-git clone https://github.com/POINTYTHRUNDRA654/Mossy-manager.
-cd Mossy-manager.
+# Clone the repository (Linux/macOS)
+git clone https://github.com/POINTYTHRUNDRA654/Mossy-manager. MossyManager
+cd MossyManager
 
-# Install dependencies
+# Install dependencies and set up
+./install.sh
+
+# Or manually:
 pip install -r requirements.txt
-
-# Install Mossy Manager
 pip install -e .
 ```
 

@@ -33,15 +33,29 @@ This guide explains the different ways to get Mossy Manager and start testing.
 
 **Requires Python 3.8 or higher**
 
+> ⚠️ **Windows users — empty folder after cloning?**
+> The repository name ends with a period (`.`), which Windows does not allow as a
+> folder name. GitHub Desktop and ZIP extraction on Windows will silently drop the
+> trailing period and may leave you with an empty or broken folder.
+>
+> **Fix:** clone from Command Prompt and supply a valid folder name:
+>
+> ```cmd
+> git clone https://github.com/POINTYTHRUNDRA654/Mossy-manager. MossyManager
+> cd MossyManager
+> install.bat
+> ```
+
 ```bash
-# Clone the repository
-git clone https://github.com/POINTYTHRUNDRA654/Mossy-manager.
-cd Mossy-manager.
+# Clone the repository (Linux/macOS)
+git clone https://github.com/POINTYTHRUNDRA654/Mossy-manager. MossyManager
+cd MossyManager
 
-# Install dependencies
+# Install dependencies and set up automatically
+./install.sh
+
+# Or manually:
 pip install -r requirements.txt
-
-# Install Mossy Manager
 pip install -e .
 
 # Test it works
