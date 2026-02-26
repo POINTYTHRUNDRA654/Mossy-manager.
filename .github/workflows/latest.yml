@@ -35,6 +35,15 @@ jobs:
       - name: Build MossyManager.exe
         run: python build.py
 
+      # ── Smoke-test: verify the exe starts and prints help ───────────────
+      # This catches missing hidden imports before we publish anything.
+      - name: Smoke-test the executable
+        run: |
+          .\dist\MossyManager.exe --help
+          .\dist\MossyManager.exe info
+          .\dist\MossyManager.exe --version
+        shell: pwsh
+
       - name: Upload executable as artifact
         uses: actions/upload-artifact@v4
         with:
@@ -62,21 +71,32 @@ jobs:
             This release is **automatically updated** on every push to `main`.
             It always contains the most recent `MossyManager.exe`.
 
+            > Every build is smoke-tested (`--help`, `info`, `--version`) before
+            > being published here, so this exe is verified to start correctly.
+
             ### 📥 Download
             Click **MossyManager.exe** below to download.
 
             ### 🎮 Adding to Mod Organizer 2
-            1. Download `MossyManager.exe` and save it anywhere (e.g. your MO2 `tools\` folder).
+            1. Download `MossyManager.exe` and save it anywhere permanent
+               (e.g. `C:\Tools\MossyManager.exe` or inside your MO2 `tools\` folder).
             2. Open **Mod Organizer 2**.
             3. Click the **gear icon** (⚙) in the toolbar → **Executables**.
             4. Click the **+** button to add a new executable.
             5. Fill in:
                - **Title**: `Mossy Manager`
                - **Binary**: Browse to `MossyManager.exe`
-               - **Arguments**: `auto --profile "Default"` *(change profile name as needed)*
-               - **Start in**: *(leave blank — MossyManager detects MO2 automatically)*
+               - **Arguments**: `auto --profile "Default"` *(replace `Default` with your profile name)*
+               - **Start in**: *(leave blank — Mossy Manager detects MO2 automatically)*
             6. Click **OK** and close the dialog.
-            7. Select **Mossy Manager** from the dropdown next to the Run button and click **Run**.
+            7. Select **Mossy Manager** from the Run dropdown and click **Run**.
+
+            ### What it does when run from MO2
+            - Auto-detects your MO2 installation and selected profile
+            - Optimizes your Fallout 4 load order using advanced rules
+            - Scans all your mods for conflicts and reports severity
+            - Generates actionable recommendations
+            - All changes are backed up automatically before anything is modified
 
             ### For versioned/stable releases
             See the [Releases page](../../releases) for tagged versions.
@@ -84,3 +104,4 @@ jobs:
           files: dist/MossyManager.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
