@@ -3,6 +3,9 @@ name: Build and Release
 on:
   release:
     types: [created]
+  push:
+    tags:
+      - 'v*'  # Automatically build and publish when a version tag is pushed
   workflow_dispatch:  # Allow manual triggers
     inputs:
       version:
@@ -34,6 +37,13 @@ jobs:
         run: |
           python build.py
       
+      - name: Smoke-test the executable
+        run: |
+          .\dist\MossyManager.exe --help
+          .\dist\MossyManager.exe info
+          .\dist\MossyManager.exe --version
+        shell: pwsh
+
       - name: Upload Windows executable
         uses: actions/upload-artifact@v4
         with:
@@ -41,10 +51,11 @@ jobs:
           path: dist/MossyManager.exe
       
       - name: Upload to release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
         uses: softprops/action-gh-release@v2
         with:
           files: dist/MossyManager.exe
+          name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
   
   build-linux:
     runs-on: ubuntu-latest
@@ -73,6 +84,12 @@ jobs:
         run: |
           chmod +x dist/MossyManager
       
+      - name: Smoke-test the executable
+        run: |
+          ./dist/MossyManager --help
+          ./dist/MossyManager info
+          ./dist/MossyManager --version
+
       - name: Upload Linux executable
         uses: actions/upload-artifact@v4
         with:
@@ -80,10 +97,11 @@ jobs:
           path: dist/MossyManager
       
       - name: Upload to release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
         uses: softprops/action-gh-release@v2
         with:
           files: dist/MossyManager
+          name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
   
   build-macos:
     runs-on: macos-latest
@@ -112,8 +130,14 @@ jobs:
         run: |
           chmod +x dist/MossyManager
       
+      - name: Smoke-test the executable
+        run: |
+          ./dist/MossyManager --help
+          ./dist/MossyManager info
+          ./dist/MossyManager --version
+
       - name: Create DMG
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
         run: |
           hdiutil create -volname "MossyManager" -srcfolder dist -ov -format UDZO MossyManager-macOS.dmg
       
@@ -124,7 +148,8 @@ jobs:
           path: dist/MossyManager
       
       - name: Upload to release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
         uses: softprops/action-gh-release@v2
         with:
           files: MossyManager-macOS.dmg
+          name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
