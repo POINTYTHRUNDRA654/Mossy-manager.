@@ -84,7 +84,13 @@ MossyManager.exe ui --open
 mossy ui --open
 ```
 
-The UI starts a local server on http://127.0.0.1:8732/, detects MO2, and lets you preview/apply load order optimization and run conflict scans. Apply is opt-in; keep "Apply" unchecked for dry-run previews.
+The UI starts a local server on http://127.0.0.1:8732/, detects MO2, and lets you preview/apply load order optimization.  There are also checkboxes to scan for conflicts and (optionally) generate an xEdit resolution patch. During operations a spinner appears in the top‑right corner for long tasks.  After optimisation the panel shows AI advice/recommendations and, if requested, a full conflict report you can copy.
+
+A banner at the top will alert you if a newer release is available and link directly to the GitHub releases page.  New in this version is a **Merge Mods** button which launches a step‑by‑step wizard: choose mods installed in your MO2 `mods` folder, confirm your selection, and the server will perform (or stub) the merge.  This wizard is purely client‑side HTML+JS but can be extended to call the existing Node merger.
+
+For automation, Mossy Manager exposes a simple webhook endpoint at `/api/webhook/mo2`.  MO2 (or any other tool) can POST `{ "profile": "Default" }` to trigger an optimization run on that profile and receive the results in JSON.  This enables external triggers when profiles change.
+
+Apply is still opt‑in; keep "Apply" unchecked for dry‑run previews.
 
 ## 🎮 For Fallout 4 Users (Automatic Optimization)
 

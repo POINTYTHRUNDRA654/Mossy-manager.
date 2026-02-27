@@ -20,6 +20,9 @@ uvicorn>=0.30.0
 scikit-learn>=1.3.0
 numpy>=1.24.0
 
+# HTTP client used by UI update checker
+requests>=2.30.0
+
 # For building executables (optional - install with: pip install -e ".[build]")
 pyinstaller>=5.13.0
 

@@ -81,6 +81,28 @@ def main():
             print()
             print(f"You can now distribute the {exe_name} file!")
             print("Users can run it directly without installing Python.")
+
+            # create an MO2-friendly package folder containing the exe and a
+            # sample executable ini that can be dropped into MO2/tools
+            mo2_folder = Path('dist') / 'MO2_Tools_Package'
+            if not mo2_folder.exists():
+                mo2_folder.mkdir(parents=True)
+            shutil.copy2(exe_path, mo2_folder / exe_name)
+
+            sample_ini = mo2_folder / 'MossyManager.ini'
+            ini_content = (
+                "[General]\n"
+                "name=Mossy Manager\n"
+                f"path={exe_name}\n"
+                "args=auto --profile \"Default\"\n"
+                "workDir=\n"
+            )
+            with open(sample_ini, 'w', encoding='utf-8') as f:
+                f.write(ini_content)
+
+            print(f"\nMO2 package created at: {mo2_folder}")
+            print("Copy the entire folder into your MO2 'tools' directory, then add\n" \
+                  "the executable via MO2's UI (or use the generated ini file).")
         else:
             print("⚠ Warning: Executable not found at expected location")
             return 1

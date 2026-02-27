@@ -49,6 +49,24 @@ Mossy Manager is designed with a modular architecture to handle the complex task
 - `MergeGroup`: Group of mods to be merged together
 - `MergeResult`: Result of a merge operation
 
+## AI Brain
+
+This subsystem (located in `src/mossy_manager/ai/brain.py`) provides a
+machine‑learning powered assistant for load order and conflict analysis.
+Features include:
+
+* Compatibility scoring (TF‑IDF + cosine similarity)
+* Category clustering (K‑Means)
+* Conflict‑risk prediction using both a Random Forest and a small neural
+  network (MLPClassifier) trained on hand‑crafted examples
+* Load‑order anomaly detection via Isolation Forest
+* Ensemble recommendations combining ML outputs with the rule engine
+* Online learning feedback loop for continuous improvement
+
+The inclusion of an actual neural network meets the requirement for a
+“neural model” and enables richer, evolving predictions beyond simple
+heuristics.
+
 ### 2. Core Module (`src/core/`)
 
 #### BA2Handler
@@ -240,6 +258,27 @@ TypeScript provides:
 ### 3. Immutable Operations
 
 - Original files never modified
+
+
+## AI Brain (src/mossy_manager/ai)
+
+This subsystem provides advanced machine-learning capabilities for
+analyzing load orders and predicting conflicts.  Core features include:
+
+* **Compatibility scoring** using TF‑IDF vectorisation and cosine
+  similarity of plugin names.
+* **Category clustering** via K‑Means to group mods by behavioural themes.
+* **Conflict‑risk prediction** employing both a Random Forest classifier and
+  a lightweight neural network (MLPClassifier).  The dual models allow
+  comparison of tree‑based and neural predictions, satisfying the desire for
+  an "actual neural model" beyond simple heuristics.
+* **Load‑order anomaly detection** with an Isolation Forest.
+* **Smart recommendations** that ensemble all ML outputs together with the
+  Fallout 4 rule engine.
+* **Online learning** to incorporate user feedback and improve over time.
+
+The brain is optional but enabled by default; scikit-learn is required and
+will be gracefully skipped if unavailable.
 - Merge creates new files
 - Backup system for safety
 

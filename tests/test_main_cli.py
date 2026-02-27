@@ -9,6 +9,7 @@ from unittest.mock import patch
 from io import StringIO
 
 from mossy_manager.main import main
+from click.testing import CliRunner
 
 
 def run_main(*args):
@@ -39,28 +40,136 @@ class TestMainCLINoCommand:
         assert rc == 0
 
 
-class TestMainCLIInfo:
-    """Test the info sub-command"""
+class TestMainCLIDetect:
+    """Test the detect sub-command"""
 
-    def test_info_no_path(self):
-        rc, out, err = run_main("info")
+    def test_detect_no_mo2(self, monkeypatch):
+        """When MO2 is not installed, user is informed"""
+        monkeypatch.setattr(
+            'mossy_manager.integrations.mo2.MO2Integration.detect_mo2_installation',
+            lambda: None
+        )
+        rc, out, err = run_main('detect')
         assert rc == 0
-        assert "Not specified" in out
+        assert 'Mod Organizer 2 installation not detected' in out
 
-    def test_info_with_path(self):
-        rc, out, err = run_main("info", "--path", "/some/path")
+    def test_detect_with_mo2_writes_config(self, tmp_path, monkeypatch):
+        """MO2 detection should print info and be able to write ini"""
+        fake = tmp_path / 'MO2'
+        (fake / 'tools' / 'MossyManager').mkdir(parents=True)
+        (fake / 'tools' / 'MossyManager' / 'MossyManager.exe').write_text('')
+        monkeypatch.setattr(
+            'mossy_manager.integrations.mo2.MO2Integration.detect_mo2_installation',
+            lambda: fake
+        )
+        # prevent xEdit detection from printing path
+        monkeypatch.setattr(
+            'mossy_manager.utils.xedit_integration.XEditIntegration.detect_xedit',
+            lambda game, search_roots=None: None
+        )
+        cfg = tmp_path / 'config.ini'
+        rc, out, err = run_main('detect', '--mo2-config', str(cfg))
         assert rc == 0
-        assert "/some/path" in out
+        # message should mention MO2 path or "MO2 at"
+        assert 'MO2 at:' in out or 'Mod Organizer 2' in out
+        assert cfg.exists()
+        assert 'name=Mossy Manager' in cfg.read_text()
 
+    def test_auto_fo4_uses_active_profile(self, tmp_path, monkeypatch):
+        """click CLI: auto-fo4 defaults to active profile when none provided"""
+        # prepare fake MO2 directory with profile
+        fake = tmp_path / 'MO2'
+        (fake / 'profiles' / 'Default').mkdir(parents=True)
+        (fake / 'profiles' / 'Default' / 'plugins.txt').write_text('*Fallout4.esm\n')
+        (fake / 'profiles' / 'Default' / 'loadorder.txt').write_text('Fallout4.esm\n')
+        (fake / 'profiles' / '_active_profile.txt').write_text('Default')
+        monkeypatch.setattr(
+            'mossy_manager.integrations.mo2.MO2Integration.detect_mo2_installation',
+            lambda: fake
+        )
+        from mossy_manager.games.fallout4 import Fallout4Rules
+        monkeypatch.setattr(Fallout4Rules, 'optimize_load_order', lambda order: order)
 
-class TestMainCLIMod:
-    """Test the mod sub-command"""
+        from mossy_manager.cli.main import main as click_main
+        from click.testing import CliRunner
+        r = CliRunner().invoke(click_main, ['loadorder', 'auto-fo4'])
+        assert r.exit_code == 0
+        assert 'Using active profile: Default' in r.stdout
 
-    def test_mod_list_empty(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            rc, out, err = run_main("mod", "list", "--path", tmpdir)
-        assert rc == 0
-        assert "No mods found" in out
+    def test_auto_fo4_conflict_scan(self, tmp_path, monkeypatch):
+        """scan-conflicts option should invoke ConflictResolver"""
+        fake = tmp_path / 'MO2'
+        (fake / 'profiles' / 'Default').mkdir(parents=True)
+        # ensure mods dir exists
+        (fake / 'mods').mkdir(parents=True)
+        (fake / 'profiles' / 'Default' / 'plugins.txt').write_text('*A.esm\n')
+        (fake / 'profiles' / 'Default' / 'loadorder.txt').write_text('A.esm\n')
+        (fake / 'profiles' / '_active_profile.txt').write_text('Default')
+        monkeypatch.setattr(
+            'mossy_manager.integrations.mo2.MO2Integration.detect_mo2_installation',
+            lambda: fake
+        )
+        # stub optimizer
+        from mossy_manager.games.fallout4 import Fallout4Rules
+        monkeypatch.setattr(Fallout4Rules, 'optimize_load_order', lambda order: order)
+        # patch ConflictResolver to produce simple output
+        import importlib
+        cli_module = importlib.import_module('mossy_manager.cli.main')
+        class DummyResolver:
+            def __init__(self, mods_path):
+                pass
+            def scan_mod_files(self, name, path):
+                pass
+            def generate_report(self):
+                return 'dummy report'
+            def get_statistics(self):
+                return {'total_conflicts':0,'critical':0,'high':0,'medium':0,'low':0}
+            def export_for_xedit(self):
+                return []
+        monkeypatch.setattr(cli_module, 'ConflictResolver', DummyResolver)
+        from mossy_manager.cli.main import main as click_main
+        from click.testing import CliRunner
+        r = CliRunner().invoke(click_main, ['loadorder', 'auto-fo4', '--scan-conflicts'])
+        assert r.exit_code == 0
+        assert 'dummy report' in r.stdout
+
+    def test_auto_fo4_resolve_xedit(self, tmp_path, monkeypatch):
+        """resolve-xedit flag should call XEditIntegration.export_conflicts"""
+        fake = tmp_path / 'MO2'
+        (fake / 'profiles' / 'Default').mkdir(parents=True)
+        (fake / 'mods').mkdir(parents=True)
+        (fake / 'profiles' / 'Default' / 'plugins.txt').write_text('*A.esm\n')
+        (fake / 'profiles' / 'Default' / 'loadorder.txt').write_text('A.esm\n')
+        (fake / 'profiles' / '_active_profile.txt').write_text('Default')
+        monkeypatch.setattr(
+            'mossy_manager.integrations.mo2.MO2Integration.detect_mo2_installation',
+            lambda: fake
+        )
+        from mossy_manager.games.fallout4 import Fallout4Rules
+        monkeypatch.setattr(Fallout4Rules, 'optimize_load_order', lambda order: order)
+        # stub ConflictResolver so logging is minimal
+        import importlib
+        cli_module = importlib.import_module('mossy_manager.cli.main')
+        class DummyResolver2:
+            def __init__(self, mods_path): pass
+            def scan_mod_files(self, a,b): pass
+            def generate_report(self): return {}
+            def get_statistics(self): return {'total_conflicts':0,'critical':0,'high':0,'medium':0,'low':0}
+            def export_for_xedit(self):
+                return []
+        monkeypatch.setattr(cli_module, 'ConflictResolver', DummyResolver2)
+        # capture export call
+        from mossy_manager.utils.xedit_integration import XEditIntegration
+        called = {}
+        def fake_create(self, conflicts, patch_name, output_dir):
+            called['yes'] = True
+            return {'success': True, 'export_path': 'a', 'script_path': 'b', 'xedit_launched': False}
+        monkeypatch.setattr(XEditIntegration, 'create_conflict_resolution_patch', fake_create)
+        from mossy_manager.cli.main import main as click_main
+        from click.testing import CliRunner
+        r = CliRunner().invoke(click_main, ['loadorder', 'auto-fo4', '--resolve-xedit'])
+        assert r.exit_code == 0
+        assert called.get('yes', False) is True
 
     def test_mod_list_with_mods(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -12,6 +12,9 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 import os as _os
 
+# Determine spec directory even when __file__ is missing (PyInstaller+Python 3.14 issue)
+_spec_dir = _os.path.abspath(_os.path.dirname(__file__)) if '__file__' in globals() else _os.getcwd()
+
 # ── Third-party packages that need full collection ─────────────────────────
 # sklearn has hundreds of lazy sub-imports PyInstaller cannot detect statically
 _d_sklearn,  _b_sklearn,  _h_sklearn  = collect_all('sklearn')
@@ -27,7 +30,7 @@ block_cipher = None
 a = Analysis(
     ['src/mossy_manager/cli/main.py'],
     # ── pathex must include src/ so mossy_manager package is found ──────────
-    pathex=[_os.path.join(_os.path.dirname(__file__) or '.', 'src')],
+    pathex=[_os.path.join(_spec_dir, 'src')],
     binaries=(
         _b_sklearn + _b_numpy + _b_fastapi + _b_starlette + _b_pydantic + _b_anyio
     ),

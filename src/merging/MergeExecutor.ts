@@ -38,6 +38,24 @@ export class MergeExecutor {
 
       const outputPath = path.join(options.outputDirectory, group.outputFileName);
 
+      // Backup source archives if requested
+      if (options.backupSources) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupDir = path.join(options.outputDirectory, 'source_backup_' + timestamp);
+        fs.mkdirSync(backupDir, { recursive: true });
+
+        const allArchives = group.mods.flatMap(mod => mod.archives);
+        for (const archive of allArchives) {
+          try {
+            const dest = path.join(backupDir, path.basename(archive.fullPath));
+            fs.copyFileSync(archive.fullPath, dest);
+          } catch (err) {
+            // if a source file is missing just log and continue
+            console.warn('Warning: could not backup source archive', archive.fullPath);
+          }
+        }
+      }
+
       // Check if output file exists
       if (fs.existsSync(outputPath) && !options.overwriteExisting) {
         errors.push(`Output file already exists: ${outputPath}`);

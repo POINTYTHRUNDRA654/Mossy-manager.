@@ -59,6 +59,14 @@ def main():
     info_parser = subparsers.add_parser("info", help="Show MO2 installation info")
     info_parser.add_argument("--path", help="MO2 installation path")
 
+    # Detect command (added for auto-detection of MO2/xEdit and MO2 configuration)
+    detect_parser = subparsers.add_parser(
+        "detect", help="Auto-detect MO2, xEdit, and suggest MO2 executable settings"
+    )
+    detect_parser.add_argument(
+        "--mo2-config", help="Write a simple MO2 executable ini snippet to this file"
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -161,6 +169,50 @@ def main():
             print(f"  Path: {args.path or 'Not specified'}")
             print(f"  Status: Ready to manage")
             print("\nUse 'mossy-manager --help' to see available commands")
+
+        elif args.command == "detect":
+            from mossy_manager.integrations.mo2 import MO2Integration
+            from mossy_manager.utils.xedit_integration import XEditIntegration
+
+            detected = MO2Integration.detect_mo2_installation()
+            if detected:
+                print(f"Detected MO2 at: {detected}")
+                print("To add Mossy Manager in MO2 executables use:")
+                print("  Title     : Mossy Manager")
+                print(f"  Binary    : {detected}/tools/MossyManager/MossyManager.exe")
+                print("  Arguments : auto --profile \"Default\"")
+                print("  Start in  : (leave blank)")
+                if args.mo2_config:
+                    try:
+                        rel = os.path.relpath(
+                            os.path.join(detected, 'tools', 'MossyManager', 'MossyManager.exe'),
+                            start=detected
+                        )
+                    except Exception:
+                        rel = os.path.join(detected, 'tools', 'MossyManager', 'MossyManager.exe')
+                    ini_str = (
+                        "[General]\n"
+                        "name=Mossy Manager\n"
+                        f"path={rel}\n"
+                        "args=auto --profile \"Default\"\n"
+                        "workDir=\n"
+                    )
+                    with open(args.mo2_config, 'w', encoding='utf-8') as f:
+                        f.write(ini_str)
+                    print(f"INI snippet written to: {args.mo2_config}")
+            else:
+                print("Mod Organizer 2 installation not detected.")
+
+            xedit_path = None
+            try:
+                xedit_path = XEditIntegration.detect_xedit('fallout4',
+                                                           search_roots=[detected] if detected else None)
+            except Exception:
+                pass
+            if xedit_path:
+                print(f"Detected xEdit at: {xedit_path}")
+            else:
+                print("xEdit installation not found (other commands may accept --xedit-path)")
 
         return 0
 

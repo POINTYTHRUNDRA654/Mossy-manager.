@@ -64,4 +64,10 @@ export interface MergeOptions {
   validateAfterMerge?: boolean;
   includeLooseFiles?: boolean;
   allowFileOverwrite?: boolean;
+  /**
+   * When true, the original BA2 archives will be copied to a timestamped
+   * subdirectory inside the output folder before merging.  Provides an easy
+   * rollback in case something goes wrong.
+   */
+  backupSources?: boolean;
 }

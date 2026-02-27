@@ -185,7 +185,8 @@ program
   .description('Merge compatible mods')
   .argument('<directory>', 'Directory containing mods')
   .option('-o, --output <path>', 'Output directory for merged archives', './merged')
-  .option('--no-backup', 'Skip creating backups')
+  .option('--no-backup', 'Skip creating backups of existing merged archives')
+  .option('--no-backup-sources', 'Skip copying source BA2 files before merging')
   .option('--overwrite', 'Overwrite existing merged archives')
   .option('--validate', 'Validate merged archives')
   .option('--no-loose', 'Skip merging loose (non-BA2) files')
@@ -306,6 +307,7 @@ program
       const mergeOptions: MergeOptions = {
         outputDirectory: options.output,
         createBackup: options.backup !== false,
+        backupSources: options.backupSources !== false,
         overwriteExisting: options.overwrite || false,
         validateAfterMerge: options.validate || false,
         includeLooseFiles: options.loose !== false,

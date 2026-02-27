@@ -2,7 +2,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
+import asyncio
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -23,6 +25,11 @@ class OptimizeRequest(BaseModel):
     profile: str
     apply: bool = False
     backup: bool = True
+    # additional options that mirror CLI
+    scan_conflicts: bool = False
+    resolve_xedit: bool = False
+    xedit_path: Optional[str] = None
+    patch_name: str = "MossyManager_ConflictPatch"
 
 
 class ConflictScanRequest(BaseModel):
@@ -41,7 +48,37 @@ class LoadOrderResponse(BaseModel):
     enabled: dict
 
 
+class VersionResponse(BaseModel):
+    current: str
+    latest: Optional[str] = None
+    update_available: bool = False
+
+
+class ModsListResponse(BaseModel):
+    mods: List[str]
+
+
+class MergeRequest(BaseModel):
+    mo2_path: Optional[str] = None
+    mods: List[str]
+
+
+class WebhookRequest(BaseModel):
+    mo2_path: Optional[str] = None
+    profile: str
+
+
 static_dir = Path(__file__).parent / "static"
+
+# simple progress streaming broadcaster
+_stream_clients: List[asyncio.Queue] = []
+
+def send_progress(message: str):
+    for q in list(_stream_clients):
+        try:
+            q.put_nowait(message)
+        except asyncio.QueueFull:
+            pass
 
 
 def _ensure_mo2(mo2_path: Optional[str]) -> MO2Integration:
@@ -110,6 +147,8 @@ def build_app() -> FastAPI:
 
     @app.post("/api/loadorder/optimize")
     def optimize_load_order(payload: OptimizeRequest):
+        # progress events
+        send_progress(f"Optimizing profile {payload.profile}")
         mo2 = _ensure_mo2(payload.mo2_path)
         profiles = mo2.list_profiles()
         if payload.profile not in profiles:
@@ -121,7 +160,9 @@ def build_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="No plugins found in profile")
 
         issues = Fallout4Rules.validate_load_order(current_order)
+        send_progress("Load order validated")
         optimized = Fallout4Rules.optimize_load_order(current_order)
+        send_progress("Load order optimized")
 
         moved = []
         index_map = {name: i for i, name in enumerate(current_order)}
@@ -150,6 +191,38 @@ def build_app() -> FastAPI:
             mo2.write_loadorder_txt(payload.profile, optimized)
             applied = True
 
+        # conflict handling options
+        conflict_report = None
+        xedit_result = None
+        if payload.scan_conflicts or payload.resolve_xedit:
+            resolver = ConflictResolver(Path(mo2.mods_path or '.'))
+            for mod_dir in Path(mo2.mods_path or '.').iterdir():
+                if mod_dir.is_dir():
+                    resolver.scan_mod_files(mod_dir.name, mod_dir)
+            conflict_report = resolver.generate_report()
+            stats = resolver.get_statistics()
+            if payload.resolve_xedit:
+                xe = XEditIntegration(xedit_path=Path(payload.xedit_path) if payload.xedit_path else None)
+                xedit_result = xe.create_conflict_resolution_patch(
+                    conflicts=resolver.export_for_xedit(),
+                    patch_name=payload.patch_name,
+                    output_dir=Path('.') / 'xedit_output'
+                )
+        
+        return {
+            "profile": payload.profile,
+            "applied": applied,
+            "backup": backup_path,
+            "issues": issues,
+            "recommendations": recommendations,
+            "current_order": current_order,
+            "optimized_order": optimized,
+            "moved": moved,
+            "conflict_report": conflict_report,
+            "conflict_stats": stats if payload.scan_conflicts else None,
+            "xedit_result": xedit_result,
+        }
+
         return {
             "profile": payload.profile,
             "applied": applied,
@@ -163,6 +236,7 @@ def build_app() -> FastAPI:
 
     @app.post("/api/conflicts/scan", response_model=ConflictScanResponse)
     def scan_conflicts(payload: ConflictScanRequest):
+        send_progress("Starting conflict scan")
         mo2 = _ensure_mo2(payload.mo2_path)
         mods_path = mo2.mods_path
         if not mods_path or not mods_path.exists():
@@ -172,11 +246,30 @@ def build_app() -> FastAPI:
         scanned = 0
         for mod_dir in mods_path.iterdir():
             if mod_dir.is_dir():
+                send_progress(f"Scanning {mod_dir.name}")
                 resolver.scan_mod_files(mod_dir.name, mod_dir)
                 scanned += 1
 
         stats = resolver.get_statistics()
+        send_progress("Conflict scan complete")
         return ConflictScanResponse(scanned_mods=scanned, stats=stats)
+
+    @app.get("/api/stream")
+    async def stream_progress(request: Request):
+        q: asyncio.Queue = asyncio.Queue()
+        _stream_clients.append(q)
+
+        async def event_generator():
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    msg = await q.get()
+                    yield f"data: {msg}\n\n"
+            finally:
+                _stream_clients.remove(q)
+
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
 
     @app.get("/api/tools")
     def tool_status(mo2_path: Optional[str] = None):
@@ -190,6 +283,65 @@ def build_app() -> FastAPI:
             "mo2_path": str(mo2.mo2_path) if mo2 and mo2.mo2_path else None,
             "mods_path": str(mo2.mods_path) if mo2 and mo2.mods_path else None,
             "xedit_path": str(xedit_path) if xedit_path else None,
+        }
+
+    # version info / update check
+    @app.get("/api/version", response_model=VersionResponse)
+    def get_version():
+        import mossy_manager
+        current = mossy_manager.__version__
+        latest = current
+        update = False
+        # try contacting GitHub for latest release
+        try:
+            import requests
+            r = requests.get("https://api.github.com/repos/POINTYTHRUNDRA654/Mossy-manager/releases/latest", timeout=2)
+            if r.ok:
+                data = r.json()
+                latest = data.get("tag_name", current)
+                if latest.startswith("v"): latest = latest[1:]
+                update = latest != current
+        except Exception:
+            pass
+        return VersionResponse(current=current, latest=latest, update_available=update)
+
+    # mod listing and merge endpoints
+    @app.get("/api/mods", response_model=ModsListResponse)
+    def list_mods(mo2_path: Optional[str] = None):
+        mo2 = _ensure_mo2(mo2_path)
+        mods_dir = mo2.mods_path
+        if not mods_dir or not mods_dir.exists():
+            raise HTTPException(status_code=404, detail="Mods directory not found")
+        mods = [p.name for p in mods_dir.iterdir() if p.is_dir()]
+        return ModsListResponse(mods=mods)
+
+    @app.post("/api/mods/merge")
+    def merge_mods(payload: MergeRequest):
+        mo2 = _ensure_mo2(payload.mo2_path)
+        mods_dir = mo2.mods_path
+        if not mods_dir or not mods_dir.exists():
+            raise HTTPException(status_code=404, detail="Mods directory not found")
+        # placeholder: in future invoke merger
+        merged = payload.mods
+        return {"merged": merged, "status": "success"}
+
+    # webhook for MO2
+    @app.post("/api/webhook/mo2")
+    def mo2_webhook(payload: WebhookRequest):
+        mo2 = _ensure_mo2(payload.mo2_path)
+        profile = payload.profile
+        if profile not in mo2.list_profiles():
+            raise HTTPException(status_code=404, detail=f"Profile '{profile}' not found")
+        current_order = mo2.read_loadorder_txt(profile)
+        if not current_order:
+            raise HTTPException(status_code=404, detail="No plugins found in profile")
+        issues = Fallout4Rules.validate_load_order(current_order)
+        optimized = Fallout4Rules.optimize_load_order(current_order)
+        return {
+            "profile": profile,
+            "issues": issues,
+            "current_order": current_order,
+            "optimized_order": optimized,
         }
 
     @app.get("/health")

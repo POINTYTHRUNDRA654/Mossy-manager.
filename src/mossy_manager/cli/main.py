@@ -64,6 +64,56 @@ def main(verbose):
         logging.getLogger().setLevel(logging.DEBUG)
 
 
+@main.command('detect')
+@click.option('--mo2-config', type=click.Path(),
+              help='Write a small MO2 executable ini file to this location')
+def detect(mo2_config):
+    """Auto-detect installations and provide MO2 configuration guidance"""
+    from mossy_manager.utils.xedit_integration import XEditIntegration
+
+    # detect MO2
+    detected_mo2 = MO2Integration.detect_mo2_installation()
+    if detected_mo2:
+        click.echo(f"{Fore.GREEN}Detected Mod Organizer 2 at: {detected_mo2}{Style.RESET_ALL}")
+        click.echo("\nTo add Mossy Manager as an executable in MO2, use the following values:")
+        click.echo("  Title     : Mossy Manager")
+        click.echo(f"  Binary    : {detected_mo2 / 'tools' / 'MossyManager' / 'MossyManager.exe'}")
+        click.echo("  Arguments : auto --profile \"Default\"")
+        click.echo("  Start in  : (leave blank, the tool autodetects MO2)")
+        if mo2_config:
+            # write a simple ini snippet that MO2 can import/drop into its tools folder
+            try:
+                # the path written to ini should be relative to MO2 if possible
+                rel_path = os.path.relpath(detected_mo2 / 'tools' / 'MossyManager' / 'MossyManager.exe',
+                                           start=detected_mo2)
+            except Exception:
+                rel_path = str(detected_mo2 / 'tools' / 'MossyManager' / 'MossyManager.exe')
+            ini_content = (
+                "[General]\n"
+                "name=Mossy Manager\n"
+                f"path={rel_path}\n"
+                "args=auto --profile \"Default\"\n"
+                "workDir=\n"
+            )
+            with open(mo2_config, 'w', encoding='utf-8') as f:
+                f.write(ini_content)
+            click.echo(f"INI snippet written to: {mo2_config}")
+    else:
+        click.echo(f"{Fore.RED}Mod Organizer 2 installation not detected.{Style.RESET_ALL}")
+
+    # detect xEdit for convenience
+    xedit_path = None
+    try:
+        xedit_path = XEditIntegration.detect_xedit('fallout4',
+                                                   search_roots=[detected_mo2] if detected_mo2 else None)
+    except Exception:
+        pass
+    if xedit_path:
+        click.echo(f"{Fore.GREEN}Detected xEdit at: {xedit_path}{Style.RESET_ALL}")
+    else:
+        click.echo("xEdit installation not found (you can provide --xedit-path to other commands)")
+
+
 @main.group()
 def loadorder():
     """Manage plugin load order"""
@@ -192,18 +242,32 @@ def optimize_loadorder(plugins_file, output, apply, backup):
 @loadorder.command('auto-fo4')
 @click.option('--mo2-path', '-m', type=click.Path(),
               help='Path to Mod Organizer 2 installation')
-@click.option('--profile', '-p', required=True,
-              help='MO2 profile name')
+@click.option('--profile', '-p', required=False,
+              help='MO2 profile name (if omitted, uses active profile)')
 @click.option('--backup', is_flag=True, default=True,
               help='Create backup of the profile before writing')
 @click.option('--report', type=click.Path(),
               help='Write JSON optimization report to this path')
 @click.option('--dry-run', is_flag=True,
               help='Show results without writing changes')
-def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run):
+# conflict options
+@click.option('--scan-conflicts', is_flag=True,
+              help='Run a conflict scan on the mods directory after optimization')
+@click.option('--resolve-xedit', is_flag=True,
+              help='Automatically export conflicts to xEdit and optionally launch')
+@click.option('--xedit-path', '-x', type=click.Path(exists=True),
+              help='Path to xEdit executable (used with --resolve-xedit)')
+@click.option('--patch-name', '-n', default='MossyManager_ConflictPatch',
+              help='Name for xEdit patch when --resolve-xedit is used')
+def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run,
+                        scan_conflicts, resolve_xedit, xedit_path, patch_name):
     """
     Auto-optimize Fallout 4 load order for an MO2 profile using up-to-date rules.
     Reads plugins/loadorder/modlist, computes best order, and (unless dry-run) writes back.
+
+    If `--profile` is omitted the command will look for an active profile via
+    MO2's `_active_profile.txt` marker. This makes it convenient when running
+    from inside MO2 where the active profile is already selected.
     """
     click.echo(f"{Fore.CYAN}═ Fallout 4 Load Order Auto-Optimize ═{Style.RESET_ALL}")
 
@@ -218,6 +282,15 @@ def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run):
         mo2 = MO2Integration(detected)
         click.echo(f"Detected MO2 at: {detected}")
 
+    # determine profile to use
+    if not profile:
+        # try MO2 active profile marker
+        from mossy_manager.profile_manager import ProfileManager
+        pm = ProfileManager(mo2.mo2_path)
+        active = pm.get_active_profile()
+        if active:
+            profile = active
+            click.echo(f"Using active profile: {profile}")
     profiles = mo2.list_profiles()
     if profile not in profiles:
         click.echo(f"{Fore.RED}✗ Profile '{profile}' not found.{Style.RESET_ALL}")
@@ -233,6 +306,32 @@ def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run):
     if not current_order:
         click.echo(f"{Fore.RED}✗ No plugins found in profile.{Style.RESET_ALL}")
         return
+
+    # optional conflict scan ahead of optimization
+    if scan_conflicts or resolve_xedit:
+        click.echo(f"{Fore.CYAN}╔═════════ Checking conflicts before optimization ═════════╗{Style.RESET_ALL}")
+        resolver = ConflictResolver(Path(mo2.mods_path or '.'))
+        # scan each mod folder within mo2
+        mods_root = Path(mo2.mods_path or '.')
+        for mod_dir in mods_root.iterdir():
+            if mod_dir.is_dir():
+                resolver.scan_mod_files(mod_dir.name, mod_dir)
+        # export conflict list used later by xEdit
+        pre_conflicts = resolver.export_for_xedit()
+
+        if scan_conflicts:
+            report = resolver.generate_report()
+            click.echo(report)
+            stats = resolver.get_statistics()
+            click.echo(f"{Fore.CYAN}=== Conflict Statistics ==={Style.RESET_ALL}")
+            click.echo(f"Total Conflicts: {stats['total_conflicts']}")
+            click.echo(f"Critical: {Fore.RED}{stats['critical']}{Style.RESET_ALL}")
+            click.echo(f"High: {Fore.YELLOW}{stats['high']}{Style.RESET_ALL}")
+            click.echo(f"Medium: {stats['medium']}")
+            click.echo(f"Low: {stats['low']}")
+        # keep pre_conflicts when resolve_xedit is requested as well
+
+    # continue with validation and optimization
 
     click.echo(f"Loaded {len(current_order)} plugins from profile {profile}.")
 
@@ -289,6 +388,25 @@ def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run):
         mo2.write_plugins_txt(profile, optimized_plugins)
         mo2.write_loadorder_txt(profile, optimized)
         click.echo(f"{Fore.GREEN}✓ Load order written to profile.{Style.RESET_ALL}")
+
+        # after successful write, optionally resolve with xEdit
+        if resolve_xedit:
+            click.echo(f"{Fore.CYAN}╔═════════ Exporting conflicts to xEdit ═════════╗{Style.RESET_ALL}")
+            # prepare xEdit integration (reuse conflict scan results)
+            xedit = XEditIntegration(xedit_path=xedit_path)
+            # invoke high-level helper which handles export/script/launch
+            result = xedit.create_conflict_resolution_patch(
+                conflicts=pre_conflicts,
+                patch_name=patch_name,
+                output_dir=Path('.') / 'xedit_output'
+            )
+            if result.get('success'):
+                click.echo(f"  {Fore.GREEN}✓ Conflicts exported to: {result.get('export_path')}{Style.RESET_ALL}")
+                click.echo(f"  {Fore.GREEN}✓ xEdit script generated: {result.get('script_path')}{Style.RESET_ALL}")
+                if result.get('xedit_launched'):
+                    click.echo(f"\n{Fore.GREEN}✓ xEdit launched successfully!{Style.RESET_ALL}")
+            else:
+                click.echo(f"\n{Fore.RED}✗ Error exporting conflicts: {result.get('error')}{Style.RESET_ALL}")
 
     # Report
     if report:

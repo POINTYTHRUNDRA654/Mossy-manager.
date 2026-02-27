@@ -101,6 +101,10 @@ class TestModAIBrainInit:
     def test_classifier_seeded_on_init(self):
         brain = ModAIBrain()
         assert brain._classifier_trained is _SKLEARN_AVAILABLE
+        if _SKLEARN_AVAILABLE:
+            # neural network should also be trained
+            assert brain._nn_trained is True
+
 
     def test_custom_clusters(self):
         brain = ModAIBrain(n_clusters=4)
@@ -158,6 +162,8 @@ class TestConflictRiskPrediction:
         assert "confidence" in result
         assert "probabilities" in result
         assert "explanation" in result
+        # neural network output should also appear
+        assert "nn_probabilities" in result
 
     def test_severity_is_valid_label(self):
         brain = ModAIBrain()
@@ -182,6 +188,7 @@ class TestConflictRiskPrediction:
         )
         # With scripts, risk should not be "low"
         assert result["severity"] in ("high", "critical", "medium")
+        assert "nn_probabilities" in result
 
     def test_explanation_contains_severity(self):
         brain = ModAIBrain()

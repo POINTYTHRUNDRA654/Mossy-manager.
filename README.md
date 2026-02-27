@@ -16,6 +16,29 @@
 
 **Need help downloading?** See [HOW_TO_DOWNLOAD.md](HOW_TO_DOWNLOAD.md) for detailed instructions.
 
+## 🔧 Building from Source
+
+If you'd like to build your own `MossyManager.exe` (for developers or custom
+modding setups), run the included Python build script. You'll need Python
+3.8+ and the `pyinstaller` package (the script will install it if missing).
+
+```powershell
+python build.py
+```
+
+A successful build creates `dist/MossyManager.exe` and also generates an
+MO2-friendly package directory at `dist/MO2_Tools_Package` containing:
+
+- `MossyManager.exe` (the executable)
+- `MossyManager.ini` (sample configuration ready to drop into an MO2 `tools/`
+  folder)
+
+Copy the folder into your MO2 `tools` directory and add the executable via the
+MO2 **Executables** dialog (see instructions above).
+
+This is handy when you want to test the latest code or include the tool in a
+portable MO2 installation.
+
 ## 🎮 Using Mossy Manager inside Mod Organizer 2
 
 Mossy Manager can be launched directly from MO2 so it runs through MO2's virtual
@@ -30,6 +53,9 @@ file system (giving it access to your active mods and profile).
 4. Click the **gear icon** (⚙) in the MO2 toolbar → **Executables**.
 5. Click the **+** button to add a new executable and fill in:
 
+   *(tip: run `MossyManager.exe detect` in a terminal to have the tool auto‑detect your MO2 path and show the values you need to enter)*
+
+
    | Field | Value |
    |-------|-------|
    | Title | `Mossy Manager` |
@@ -41,7 +67,7 @@ file system (giving it access to your active mods and profile).
 7. Select **Mossy Manager** from the executable dropdown next to the **Run** button
    and click **Run**.
 
-Mossy Manager will auto-detect your MO2 installation, optimize your load order,
+Mossy Manager will auto-detect your MO2 installation ("detect" command can show you the path), optimize your load order,
 scan for conflicts, and print a full report — all without leaving MO2.
 
 ## 🌟 NEW: Fallout 4 Advanced Integration

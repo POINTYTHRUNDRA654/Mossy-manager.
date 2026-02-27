@@ -77,6 +77,11 @@ Tip: Make sure the path is correct and try again.
 npm start -- detect
 ```
 
+This helper will scan for a Mod Organizer 2 installation (and xEdit) and
+print out a ready‑to‑use MO2 executable configuration snippet. You can also
+provide `--mo2-config path.ini` to have the tool write a small `.ini` file
+that can be dropped into your MO2 `tools/` folder.
+
 **Detects:**
 - Mod Organizer 2 (MO2) installations
 - Vortex installations
@@ -170,10 +175,20 @@ Merging would reduce 5 archives to 2 (60.0% reduction)
 ⚠ Important:
   • Always backup your mods before merging
   • Test merged archives in-game
+  • Backups of originals are created automatically (use `--no-backup-sources` to disable)
+  • `auto-fo4` command now supports `--scan-conflicts` and `--resolve-xedit`
+    flags to chain load‑order optimisation with conflict analysis and
+    xEdit patch export.
   • Use --validate option when merging
 ```
 
 #### Merge Command
+
+**New options:**
+- `--no-backup-sources` – by default the tool copies all input BA2 files into a
+  timestamped `source_backup_…` folder inside the output directory.  This gives
+  you a quick rollback in case the merged archive turns out to be wrong.
+
 **New Options:**
 - `--dry-run`: Preview without executing
 - `-y, --yes`: Skip confirmation prompts
@@ -232,6 +247,7 @@ Tip: Run "check" command to see compatibility details.
 - ✅ Clear, helpful error messages
 - ✅ Dry-run mode for safe preview
 - ✅ Auto-detection of mod managers
+- ✅ Automatic backups of merged archives (and optionally source BA2s) to prevent data loss
 - ✅ Persistent configuration
 - ✅ Actionable tips when errors occur
 

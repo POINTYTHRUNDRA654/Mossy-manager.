@@ -106,12 +106,24 @@
     .input-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .input-row label { font-size: 12px; color: var(--muted); }
     .box { padding: 10px; border-radius: 8px; border: 1px dashed var(--border); background: rgba(255,255,255,0.02); }
+    /* spinner */
+    .spinner {
+      border: 4px solid var(--card);
+      border-top: 4px solid var(--accent);
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
   <header>
     <h1>Mossy Manager</h1>
     <div class="pill" id="mo2-pill">Detecting MO2…</div>
+    <div class="pill" id="update-banner" style="display:none; background:#fbbf24; color:#0b1222; cursor:pointer;">Update available</div>
+    <div id="spinner" class="spinner" style="display:none; position:absolute; top:16px; right:16px;"></div>
     <label class="pill">
       Profile
       <select id="profile-select"></select>
@@ -119,6 +131,7 @@
     <div class="actions">
       <button id="optimize-btn">Optimize</button>
       <button id="conflicts-btn" style="background: linear-gradient(135deg, #fbbf24, #f97316); color: #0b1222;">Scan Conflicts</button>
+      <button id="merge-btn" style="background: linear-gradient(135deg, #34d399, #3b82f6); color: #0b1222;">Merge Mods</button>
     </div>
     <div class="pill" id="tools-pill">Tools</div>
   </header>
@@ -143,6 +156,12 @@
           <div class="input-row">
             <label><input type="checkbox" id="apply-toggle" /> Apply</label>
             <label><input type="checkbox" id="backup-toggle" checked /> Backup</label>
+            <label><input type="checkbox" id="scan-toggle" /> Scan conflicts</label>
+            <label><input type="checkbox" id="resolve-toggle" /> Resolve via xEdit</label>
+          </div>
+          <div class="input-row">
+            <input type="text" id="patch-name" placeholder="Patch name" value="MossyManager_ConflictPatch" />
+            <input type="text" id="xedit-path" placeholder="xEdit path (optional)" />
           </div>
         </div>
 
@@ -181,9 +200,36 @@
           <div class="muted">Conflicts</div>
           <div id="conflict-stats">-</div>
         </div>
+        <div class="card">
+          <div class="muted">AI Advice</div>
+          <pre id="ai-advice" class="box" style="white-space: pre-wrap; max-height: 120px; overflow:auto;">-</pre>
+        </div>
+        <div class="card">
+          <div class="muted">Conflict Report</div>
+          <pre id="conflict-report" class="box" style="white-space: pre-wrap; max-height: 120px; overflow:auto;">-</pre>
+        </div>
       </div>
     </section>
   </main>
+
+  <div id="merge-wizard" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); color:var(--text); padding:24px; overflow:auto; z-index:5;">
+    <h2>Merge Mods</h2>
+    <div id="wizard-step1">
+      <div>Select mods to merge:</div>
+      <div id="mod-checkboxes" class="input-row"></div>
+      <button id="wizard-next">Next</button>
+      <button id="wizard-cancel">Cancel</button>
+    </div>
+    <div id="wizard-step2" style="display:none;">
+      <div id="wizard-summary"></div>
+      <button id="wizard-merge">Merge</button>
+      <button id="wizard-back">Back</button>
+    </div>
+    <div id="wizard-result" style="display:none;">
+      <div id="wizard-result-text"></div>
+      <button id="wizard-close">Close</button>
+    </div>
+  </div>
 
   <div class="toast" id="toast"></div>
 
@@ -199,7 +245,15 @@
     const conflictStats = document.getElementById("conflict-stats");
     const applyToggle = document.getElementById("apply-toggle");
     const backupToggle = document.getElementById("backup-toggle");
+    const scanToggle = document.getElementById("scan-toggle");
+    const resolveToggle = document.getElementById("resolve-toggle");
+    const patchNameInput = document.getElementById("patch-name");
+    const xeditPathInput = document.getElementById("xedit-path");
+    const conflictReport = document.getElementById("conflict-report");
+    const aiAdvice = document.getElementById("ai-advice");
+    const spinner = document.getElementById("spinner");
     const toast = document.getElementById("toast");
+    const updateBanner = document.getElementById("update-banner");
     const mo2Pill = document.getElementById("mo2-pill");
     const toolsPill = document.getElementById("tools-pill");
 
@@ -229,13 +283,80 @@
           profileSelect.appendChild(opt);
         });
         if (data.profiles.length) {
-          profileSelect.value = data.profiles[0];
+          // restore saved profile if present
+          let stored = localStorage.getItem('profile');
+          if (stored && data.profiles.includes(stored)) {
+            profileSelect.value = stored;
+          } else {
+            profileSelect.value = data.profiles[0];
+          }
           await refreshLoadOrder();
         }
       } catch (err) {
         mo2Pill.textContent = "MO2 not found";
         showToast(err.message);
       }
+    }
+
+    async function checkVersion() {
+      try {
+        const v = await fetchJson('/api/version');
+        if (v.update_available) {
+          updateBanner.textContent = `Update available: ${v.latest}`;
+          updateBanner.style.display = 'inline-flex';
+          updateBanner.onclick = () => window.open('https://github.com/POINTYTHRUNDRA654/Mossy-manager/releases/latest');
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    async function openWizard() {
+      const wiz = document.getElementById('merge-wizard');
+      const step1 = document.getElementById('wizard-step1');
+      const step2 = document.getElementById('wizard-step2');
+      const res = document.getElementById('wizard-result');
+      const checkContainer = document.getElementById('mod-checkboxes');
+      const summary = document.getElementById('wizard-summary');
+      const resultText = document.getElementById('wizard-result-text');
+      wiz.style.display = 'block';
+      step1.style.display = '';
+      step2.style.display = 'none';
+      res.style.display = 'none';
+      checkContainer.innerHTML = '';
+      // load mods
+      try {
+        const data = await fetchJson('/api/mods');
+        data.mods.forEach(m => {
+          const lbl = document.createElement('label');
+          lbl.innerHTML = `<input type="checkbox" value="${m}"> ${m}`;
+          checkContainer.appendChild(lbl);
+        });
+      } catch (e) {
+        showToast('Failed to load mods');
+      }
+      document.getElementById('wizard-next').onclick = () => {
+        const checked = Array.from(checkContainer.querySelectorAll('input:checked')).map(i=>i.value);
+        if (!checked.length) {
+          showToast('Select at least one mod');
+          return;
+        }
+        summary.textContent = `You selected: ${checked.join(', ')}`;
+        step1.style.display = 'none';
+        step2.style.display = '';
+        document.getElementById('wizard-merge').onclick = async () => {
+          setBusy(true);
+          try {
+            const resData = await fetchJson('/api/mods/merge', {method:'POST', body: JSON.stringify({mods: checked})});
+            resultText.textContent = `Merged: ${resData.merged.join(', ')}`;
+            step2.style.display='none';
+            res.style.display='';
+          } catch (err) {
+            showToast('Merge failed');
+          } finally { setBusy(false); }
+        };
+      };
+      document.getElementById('wizard-cancel').onclick = () => wiz.style.display='none';
+      document.getElementById('wizard-back').onclick = () => { step2.style.display='none'; step1.style.display=''; };
+      document.getElementById('wizard-close').onclick = () => wiz.style.display='none';
     }
 
     async function refreshTools() {
@@ -281,7 +402,13 @@
           profile,
           apply: applyToggle.checked,
           backup: backupToggle.checked,
+          scan_conflicts: scanToggle.checked,
+          resolve_xedit: resolveToggle.checked,
+          patch_name: patchNameInput.value || undefined,
         };
+        if (xeditPathInput.value) {
+          payload.xedit_path = xeditPathInput.value;
+        }
         const data = await fetchJson("/api/loadorder/optimize", {
           method: "POST",
           body: JSON.stringify(payload),
@@ -289,10 +416,22 @@
         summaryLine.textContent = data.applied ? "Optimized and written." : "Preview ready (dry-run).";
         resultsBox.textContent = data.optimized_order.slice(0, 10).map((p, i) => `${i + 1}. ${p}`).join("\n");
         issuesCount.textContent = `${(data.issues.errors || []).length} errors, ${(data.issues.warnings || []).length} warnings`;
+        // show AI advice list
+        aiAdvice.textContent = data.recommendations && data.recommendations.length ? data.recommendations.join("\n") : "None";
         recList.textContent = data.recommendations && data.recommendations.length ? data.recommendations.slice(0,3).join(" | ") : "None";
         statusDot.className = data.applied ? "status-dot ok" : "status-dot warn";
         statusText.textContent = data.applied ? "Applied" : "Preview only";
         if (data.backup) showToast(`Backup created: ${data.backup}`);
+        if (data.conflict_stats) {
+          const s = data.conflict_stats;
+          conflictStats.textContent = `Scanned ${s.total_conflicts || 0} conflicts | Critical ${s.critical} | High ${s.high}`;
+        }
+        if (data.conflict_report) {
+          conflictReport.textContent = JSON.stringify(data.conflict_report, null, 2);
+        }
+        if (data.xedit_result) {
+          showToast(`Patch generated: ${data.xedit_result.export_path || 'unknown'}`);
+        }
         await refreshLoadOrder();
       } catch (err) {
         statusText.textContent = err.message;
@@ -327,15 +466,40 @@
       document.getElementById("optimize-btn").disabled = b;
       document.getElementById("conflicts-btn").disabled = b;
       document.getElementById("refresh-btn").disabled = b;
+      spinner.style.display = b ? "block" : "none";
     }
 
     document.getElementById("optimize-btn").addEventListener("click", optimize);
     document.getElementById("conflicts-btn").addEventListener("click", scanConflicts);
+    document.getElementById("merge-btn").addEventListener("click", openWizard);
     document.getElementById("refresh-btn").addEventListener("click", refreshLoadOrder);
-    profileSelect.addEventListener("change", refreshLoadOrder);
+    profileSelect.addEventListener("change", () => {
+      localStorage.setItem('profile', profileSelect.value);
+      refreshLoadOrder();
+    });
+    // persist toggles/inputs
+    [applyToggle, backupToggle, scanToggle, resolveToggle].forEach(el => {
+      el.addEventListener('change', () => localStorage.setItem(el.id, el.checked));
+    });
+    [patchNameInput, xeditPathInput].forEach(el => {
+      el.addEventListener('input', () => localStorage.setItem(el.id, el.value));
+    });
 
+    // initialization
+    // restore UI state
+    ['apply-toggle','backup-toggle','scan-toggle','resolve-toggle'].forEach(id => {
+      const el = document.getElementById(id);
+      const v = localStorage.getItem(id);
+      if (el && v !== null) el.checked = v === 'true';
+    });
+    ['patch-name','xedit-path'].forEach(id => {
+      const el = document.getElementById(id);
+      const v = localStorage.getItem(id);
+      if (el && v !== null) el.value = v;
+    });
     loadMo2();
     refreshTools();
+    checkVersion();
   </script>
 </body>
 </html>

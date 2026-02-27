@@ -50,6 +50,7 @@ def _require_sklearn(feature: str):
 try:
     from sklearn.cluster import KMeans
     from sklearn.ensemble import IsolationForest, RandomForestClassifier
+    from sklearn.neural_network import MLPClassifier
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.metrics.pairwise import cosine_similarity
     from sklearn.preprocessing import LabelEncoder
@@ -217,9 +218,17 @@ class ModAIBrain:
                 max_depth=6,
                 random_state=random_state,
             )
+            # a simple multilayer perceptron for 'neural' recommendations
+            self._nn_classifier = MLPClassifier(
+                hidden_layer_sizes=(32,16),
+                max_iter=300,
+                random_state=random_state,
+            )
         else:
             self._classifier = None
+            self._nn_classifier = None
         self._classifier_trained = False
+        self._nn_trained = False
         self._label_encoder = LabelEncoder() if _SKLEARN_AVAILABLE else None
 
         # ── anomaly detector ─────────────────────────────────────────────
@@ -364,13 +373,16 @@ class ModAIBrain:
         self._fit_classifier()
 
     def _fit_classifier(self) -> None:
-        """(Re-)fit the Random Forest on all accumulated training data."""
+        """(Re-)fit the classifiers on all accumulated training data."""
         if not _SKLEARN_AVAILABLE or len(self._X_train) < 4:
             return
         X = np.vstack(self._X_train)
         y = self._label_encoder.fit_transform(self._y_train)
         self._classifier.fit(X, y)
         self._classifier_trained = True
+        if self._nn_classifier is not None:
+            self._nn_classifier.fit(X, y)
+            self._nn_trained = True
 
     def predict_conflict_risk(
         self,
@@ -417,12 +429,17 @@ class ModAIBrain:
 
         explanation = self._build_risk_explanation(mod_name, file_list, top_label, confidence)
 
-        return {
+        result = {
             "severity": top_label,
             "confidence": confidence,
             "probabilities": prob_dict,
             "explanation": explanation,
         }
+        # add neural network probabilities if available
+        if self._nn_classifier is not None and self._nn_trained:
+            nn_proba = self._nn_classifier.predict_proba(feat)[0]
+            result["nn_probabilities"] = {str(cls): round(float(p), 4) for cls, p in zip(classes, nn_proba)}
+        return result
 
     def _build_risk_explanation(
         self,
