@@ -285,25 +285,12 @@ def build_app() -> FastAPI:
             "xedit_path": str(xedit_path) if xedit_path else None,
         }
 
-    # version info / update check
+    # version info (fully offline — no network requests)
     @app.get("/api/version", response_model=VersionResponse)
     def get_version():
         import mossy_manager
         current = mossy_manager.__version__
-        latest = current
-        update = False
-        # try contacting GitHub for latest release
-        try:
-            import requests
-            r = requests.get("https://api.github.com/repos/POINTYTHRUNDRA654/Mossy-manager/releases/latest", timeout=2)
-            if r.ok:
-                data = r.json()
-                latest = data.get("tag_name", current)
-                if latest.startswith("v"): latest = latest[1:]
-                update = latest != current
-        except Exception:
-            pass
-        return VersionResponse(current=current, latest=latest, update_available=update)
+        return VersionResponse(current=current, latest=current, update_available=False)
 
     # mod listing and merge endpoints
     @app.get("/api/mods", response_model=ModsListResponse)
