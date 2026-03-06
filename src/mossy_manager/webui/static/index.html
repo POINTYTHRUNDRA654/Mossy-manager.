@@ -80,6 +80,15 @@
       border-radius: 3px;
       padding: 2px 8px;
     }
+    /* xEdit status badge shares the same pill style */
+    #xedit-status {
+      font-size: 11px;
+      color: var(--text-dim);
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 2px 8px;
+    }
 
     /* ── Toolbar ── */
     #toolbar {
@@ -510,7 +519,7 @@
     <span class="app-version" id="app-version">v1.0.0</span>
     <div class="spacer"></div>
     <span id="mo2-status">Detecting MO2…</span>
-    <span id="xedit-status" style="font-size:11px;color:var(--text-dim);background:var(--bg-dark);border:1px solid var(--border);border-radius:3px;padding:2px 8px;">xEdit: ?</span>
+    <span id="xedit-status">xEdit: ?</span>
   </div>
 
   <!-- Toolbar -->
@@ -828,14 +837,26 @@
       patchNameInput.value = patchNameInput2.value;
       xeditPathInput.value = xeditPathInput2.value;
     }
-    [applyToggle,backupToggle,scanToggle,resolveToggle].forEach(el =>
-      el.addEventListener("change", () => { syncMirrors(); localStorage.setItem(el.id, el.checked); }));
-    [patchNameInput,xeditPathInput].forEach(el =>
-      el.addEventListener("input",  () => { syncMirrors(); localStorage.setItem(el.id, el.value); }));
-    [applyToggle2,backupToggle2,scanToggle2,resolveToggle2].forEach(el =>
-      el.addEventListener("change", () => { syncFromMirrors(); localStorage.setItem(el.id.replace("2",""), el.checked); }));
-    [patchNameInput2,xeditPathInput2].forEach(el =>
-      el.addEventListener("input",  () => { syncFromMirrors(); localStorage.setItem(el.id.replace("2",""), el.value); }));
+    /* Register settings mirrors: panel-1 → panel-2 and vice versa */
+    function registerSyncListeners(primary, mirror, isPrimary) {
+      const syncFn = isPrimary ? syncMirrors : syncFromMirrors;
+      const storageKey = el => isPrimary ? el.id : el.id.replace("2", "");
+      const isCheckbox = el => el.type === "checkbox";
+      primary.forEach(el => {
+        el.addEventListener(isCheckbox(el) ? "change" : "input", () => {
+          syncFn();
+          localStorage.setItem(storageKey(el), isCheckbox(el) ? el.checked : el.value);
+        });
+      });
+    }
+    registerSyncListeners(
+      [applyToggle, backupToggle, scanToggle, resolveToggle, patchNameInput, xeditPathInput],
+      null, true
+    );
+    registerSyncListeners(
+      [applyToggle2, backupToggle2, scanToggle2, resolveToggle2, patchNameInput2, xeditPathInput2],
+      null, false
+    );
 
     /* ── Tabs ── */
     document.querySelectorAll(".tab-btn").forEach(btn => {
@@ -1043,10 +1064,18 @@
       const btnClose    = document.getElementById("wizard-close");
       const btnCancel   = document.getElementById("wizard-cancel");
 
+      function showWizardStep(stepNumber) {
+        step1.style.display    = stepNumber === 1 ? "" : "none";
+        step2.style.display    = stepNumber === 2 ? "" : "none";
+        resDiv.style.display   = stepNumber === 3 ? "" : "none";
+        btnNext.style.display  = stepNumber === 1 ? "" : "none";
+        btnMerge.style.display = stepNumber === 2 ? "" : "none";
+        btnBack.style.display  = stepNumber === 2 ? "" : "none";
+        btnClose.style.display = stepNumber === 3 ? "" : "none";
+      }
+
       wiz.classList.add("open");
-      step1.style.display = ""; step2.style.display = "none"; resDiv.style.display = "none";
-      btnNext.style.display = ""; btnMerge.style.display = "none";
-      btnBack.style.display = "none"; btnClose.style.display = "none";
+      showWizardStep(1);
       checkCont.innerHTML = "";
 
       try {
@@ -1062,21 +1091,19 @@
         const checked = Array.from(checkCont.querySelectorAll("input:checked")).map(i => i.value);
         if (!checked.length) { showToast("Select at least one mod"); return; }
         summary.textContent = `Selected mods: ${checked.join(", ")}`;
-        step1.style.display = "none"; step2.style.display = "";
-        btnNext.style.display = "none"; btnMerge.style.display = ""; btnBack.style.display = "";
+        showWizardStep(2);
         btnMerge.onclick = async () => {
           setBusy(true);
           try {
             const r = await fetchJson("/api/mods/merge", { method: "POST", body: JSON.stringify({ mods: checked }) });
             resultText.textContent = `Merged: ${r.merged.join(", ")}`;
-            step2.style.display = "none"; resDiv.style.display = "";
-            btnMerge.style.display = "none"; btnBack.style.display = "none";
-            btnClose.style.display = ""; btnCancel.style.display = "none";
+            showWizardStep(3);
+            btnCancel.style.display = "none";
           } catch (_) { showToast("Merge failed"); }
           finally { setBusy(false); }
         };
       };
-      btnBack.onclick   = () => { step2.style.display="none"; step1.style.display=""; btnNext.style.display=""; btnMerge.style.display="none"; btnBack.style.display="none"; };
+      btnBack.onclick   = () => showWizardStep(1);
       btnCancel.onclick = () => wiz.classList.remove("open");
       btnClose.onclick  = () => wiz.classList.remove("open");
     }

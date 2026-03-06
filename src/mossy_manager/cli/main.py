@@ -3,12 +3,13 @@ Command-line interface for Mossy Manager
 """
 
 import sys
+import os
 import logging
 import webbrowser
 from pathlib import Path
 from typing import Optional
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 import threading
 import time
 
@@ -411,9 +412,7 @@ def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run,
     # Report
     if report:
         report_data = {
-          'generated_at': datetime.utcnow().isoformat() + 'Z',
-          'profile': profile,
-          'mo2_path': str(mo2.mo2_path) if mo2.mo2_path else None,
+          'generated_at': datetime.now(timezone.utc).isoformat(),
           'counts': {
             'total': len(current_order),
             'moved': len(moved)
@@ -1171,7 +1170,7 @@ def auto_optimize(mo2_path, profile, game, report, backup, apply):
         # Combined report (optional)
         if report:
             combined = {
-                'generated_at': datetime.utcnow().isoformat() + 'Z',
+                'generated_at': datetime.now(timezone.utc).isoformat(),
                 'profile': profile,
                 'backup': str(backup_dir) if backup_dir else None,
                 'load_order': {

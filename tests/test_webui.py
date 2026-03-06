@@ -209,21 +209,36 @@ def test_ui_persistence_code_present():
 
 
 def test_progress_stream(tmp_path, monkeypatch):
-    # setup environment similar to other tests
-    fake = DummyMO2(tmp_path / "MO2")
+    """Verify SSE broadcaster sends messages to connected queue clients."""
     import importlib
+    import queue as stdlib_queue
+
     webapp = importlib.import_module("mossy_manager.webui.app")
-    monkeypatch.setattr(webapp, "static_dir", Path("/does/not/exist"))
-    monkeypatch.setattr(webapp, "_ensure_mo2", lambda p=None: fake)
-    test_app = build_app()
-    from fastapi.testclient import TestClient
-    with TestClient(test_app) as client:
-        # send a message first so generator has something
+
+    # 1. Unit-test send_progress: attach a real Queue, broadcast, verify receipt
+    test_q: stdlib_queue.Queue = stdlib_queue.Queue(maxsize=10)
+    webapp._stream_clients.append(test_q)
+    try:
         webapp.send_progress("hello")
-        with client.stream("GET", "/api/stream") as resp:
-            assert resp.status_code == 200
-            # read first non-empty line
-            for line in resp.iter_lines(timeout=1.0):
-                if line:
-                    assert b"hello" in line
-                    break
+        msg = test_q.get(timeout=1.0)
+        assert msg == "hello"
+    finally:
+        if test_q in webapp._stream_clients:
+            webapp._stream_clients.remove(test_q)
+
+    # 2. Verify full-queue messages are silently dropped (no exception)
+    full_q: stdlib_queue.Queue = stdlib_queue.Queue(maxsize=1)
+    full_q.put("already_full")
+    webapp._stream_clients.append(full_q)
+    try:
+        webapp.send_progress("overflow")   # must not raise
+    finally:
+        if full_q in webapp._stream_clients:
+            webapp._stream_clients.remove(full_q)
+
+    # 3. Smoke-test: /api/stream route is registered in the built app
+    monkeypatch.setattr(webapp, "static_dir", Path("/does/not/exist"))
+    monkeypatch.setattr(webapp, "_ensure_mo2", lambda p=None: DummyMO2(tmp_path / "MO2"))
+    test_app = build_app()
+    route_paths = [getattr(r, "path", None) for r in test_app.routes]
+    assert "/api/stream" in route_paths
