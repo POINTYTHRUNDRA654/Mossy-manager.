@@ -335,7 +335,7 @@ class DesktopApp:
                                         command=self._run_optimize)
         self._btn_optimize.pack(side=tk.LEFT, padx=2, pady=5)
 
-        self._btn_conflicts = ttk.Button(bar, text="🔍 Scan Conflicts",
+        self._btn_conflicts = ttk.Button(bar, text="⊙ Scan Conflicts",
                                          command=self._run_scan_conflicts)
         self._btn_conflicts.pack(side=tk.LEFT, padx=2, pady=5)
 

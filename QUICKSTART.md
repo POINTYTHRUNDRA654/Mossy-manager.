@@ -18,7 +18,7 @@ Choose one of these options:
 **To use inside Mod Organizer 2:**
 - Open MO2 → gear icon (⚙) → Executables → **+**
 - Title: `Mossy Manager`, Binary: path to `MossyManager.exe`
-- Arguments: `auto --profile "Default"`
+- Arguments: *(leave blank — the desktop window opens automatically)*
 - Click OK, then select it from the Run dropdown
 
 #### Option B: Install from Source (For Developers)

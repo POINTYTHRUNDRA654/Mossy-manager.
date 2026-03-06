@@ -68,4 +68,28 @@ if __name__ == "__main__":
         elif arg.startswith("--mo2-path="):
             mo2_path = arg.split("=", 1)[1]
 
-    launch(mo2_path=mo2_path)
+    try:
+        launch(mo2_path=mo2_path)
+    except Exception:
+        # The exe is built without a console window (console=False in the spec).
+        # An unhandled exception would cause a completely silent, invisible crash —
+        # the user just sees nothing happen when they click Run in MO2.
+        # Display the error so the user knows what went wrong.
+        import traceback as _tb
+        _msg = _tb.format_exc()
+        try:
+            import tkinter as _tk
+            import tkinter.messagebox as _mb
+            _root = _tk.Tk()
+            _root.withdraw()
+            _mb.showerror(
+                "Mossy Manager – Startup Error",
+                f"Mossy Manager could not start.\n\n{_msg}"
+            )
+            _root.destroy()
+        except Exception:
+            # If tkinter itself is broken we cannot show a GUI error dialog.
+            # Fall through to the re-raise below so the process still exits
+            # with a non-zero code (useful when run from a terminal or CI).
+            pass
+        raise
