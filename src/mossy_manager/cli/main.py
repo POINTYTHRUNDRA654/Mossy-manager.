@@ -3,12 +3,13 @@ Command-line interface for Mossy Manager
 """
 
 import sys
+import os
 import logging
 import webbrowser
 from pathlib import Path
 from typing import Optional
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 import threading
 import time
 
@@ -23,9 +24,11 @@ from mossy_manager.core.patcher import Patcher
 from mossy_manager.utils.xedit_integration import XEditIntegration
 from mossy_manager.utils.backup_manager import BackupManager
 from mossy_manager.utils.health_checker import ModHealthChecker
+from mossy_manager.utils.ini_patcher import INIPatcher, PRESET_NAMES
 from mossy_manager.integrations.mo2 import MO2Integration
 from mossy_manager.games.fallout4 import Fallout4Rules
 from mossy_manager.config_manager import ConfigManager
+from mossy_manager.mod_manager import ModManager
 from mossy_manager.webui.app import app as web_app
 from mossy_manager.ai.brain import ModAIBrain
 from mossy_manager.ai.reasoner import ModReasoner
@@ -411,9 +414,7 @@ def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run,
     # Report
     if report:
         report_data = {
-          'generated_at': datetime.utcnow().isoformat() + 'Z',
-          'profile': profile,
-          'mo2_path': str(mo2.mo2_path) if mo2.mo2_path else None,
+          'generated_at': datetime.now(timezone.utc).isoformat(),
           'counts': {
             'total': len(current_order),
             'moved': len(moved)
@@ -1171,7 +1172,7 @@ def auto_optimize(mo2_path, profile, game, report, backup, apply):
         # Combined report (optional)
         if report:
             combined = {
-                'generated_at': datetime.utcnow().isoformat() + 'Z',
+                'generated_at': datetime.now(timezone.utc).isoformat(),
                 'profile': profile,
                 'backup': str(backup_dir) if backup_dir else None,
                 'load_order': {
@@ -1966,6 +1967,266 @@ def status(mo2_path, profile, output_json, no_ai):
 
     click.echo(f"\n{Fore.CYAN}─ Run 'mossy ai analyze' for a full AI report ─{Style.RESET_ALL}")
     click.echo(f"{Fore.CYAN}─ Run 'mossy ai fix'     to generate fix scripts ─{Style.RESET_ALL}\n")
+
+
+# ============================================================
+# Mods command group  (CLI #30–32)
+# ============================================================
+
+@main.group()
+def mods():
+    """List, enable, and disable mods in an MO2 profile."""
+    pass
+
+
+@mods.command('list')
+@click.option('--mo2-path', '-m', type=click.Path(), help='Path to MO2 installation')
+@click.option('--profile', '-p', default='Default', show_default=True,
+              help='Profile whose modlist to read')
+def mods_list(mo2_path, profile):
+    """List all installed mods with their enabled/disabled status.
+
+    Reads the mods/ folder and the profile's modlist.txt so every mod's
+    current state is shown alongside its name.
+    """
+    if mo2_path:
+        mo2 = MO2Integration(Path(mo2_path))
+    else:
+        detected = MO2Integration.detect_mo2_installation()
+        if not detected:
+            click.echo(f"{Fore.RED}✗ Could not detect MO2. Specify --mo2-path.{Style.RESET_ALL}")
+            return
+        mo2 = MO2Integration(detected)
+
+    mgr = ModManager(mo2.mo2_path)
+    all_mods = mgr.list_mods()
+
+    if not all_mods:
+        click.echo(f"{Fore.YELLOW}⚠ No mods found in {mo2.mods_path}{Style.RESET_ALL}")
+        return
+
+    # Read enabled/disabled state from modlist.txt
+    state = mo2.read_modlist_txt(profile)  # {name: bool}
+
+    table = []
+    enabled_count = 0
+    for name in all_mods:
+        is_enabled = state.get(name, None)
+        if is_enabled is True:
+            status = f"{Fore.GREEN}+  Enabled{Style.RESET_ALL}"
+            enabled_count += 1
+        elif is_enabled is False:
+            status = f"{Fore.RED}-  Disabled{Style.RESET_ALL}"
+        else:
+            status = f"{Fore.YELLOW}?  Not in modlist{Style.RESET_ALL}"
+        table.append([name, status])
+
+    click.echo(f"\n{Fore.CYAN}=== Mods ({len(all_mods)} installed, "
+               f"{enabled_count} enabled) — profile: {profile} ==={Style.RESET_ALL}\n")
+    click.echo(tabulate(table, headers=["Mod Name", "Status"], tablefmt="simple"))
+
+
+@mods.command('enable')
+@click.argument('mod_name')
+@click.option('--mo2-path', '-m', type=click.Path(), help='Path to MO2 installation')
+@click.option('--profile', '-p', default='Default', show_default=True,
+              help='Profile whose modlist to update')
+def mods_enable(mod_name, mo2_path, profile):
+    """Enable MOD_NAME in the specified MO2 profile's modlist.txt."""
+    if mo2_path:
+        mo2 = MO2Integration(Path(mo2_path))
+    else:
+        detected = MO2Integration.detect_mo2_installation()
+        if not detected:
+            click.echo(f"{Fore.RED}✗ Could not detect MO2. Specify --mo2-path.{Style.RESET_ALL}")
+            return
+        mo2 = MO2Integration(detected)
+
+    mgr = ModManager(mo2.mo2_path)
+    try:
+        mgr.enable_mod(mod_name, profile_name=profile)
+        click.echo(f"{Fore.GREEN}✓ '{mod_name}' enabled in profile '{profile}'.{Style.RESET_ALL}")
+    except ValueError as exc:
+        click.echo(f"{Fore.RED}✗ {exc}{Style.RESET_ALL}")
+
+
+@mods.command('disable')
+@click.argument('mod_name')
+@click.option('--mo2-path', '-m', type=click.Path(), help='Path to MO2 installation')
+@click.option('--profile', '-p', default='Default', show_default=True,
+              help='Profile whose modlist to update')
+def mods_disable(mod_name, mo2_path, profile):
+    """Disable MOD_NAME in the specified MO2 profile's modlist.txt."""
+    if mo2_path:
+        mo2 = MO2Integration(Path(mo2_path))
+    else:
+        detected = MO2Integration.detect_mo2_installation()
+        if not detected:
+            click.echo(f"{Fore.RED}✗ Could not detect MO2. Specify --mo2-path.{Style.RESET_ALL}")
+            return
+        mo2 = MO2Integration(detected)
+
+    mgr = ModManager(mo2.mo2_path)
+    try:
+        mgr.disable_mod(mod_name, profile_name=profile)
+        click.echo(f"{Fore.GREEN}✓ '{mod_name}' disabled in profile '{profile}'.{Style.RESET_ALL}")
+    except ValueError as exc:
+        click.echo(f"{Fore.RED}✗ {exc}{Style.RESET_ALL}")
+
+
+# ============================================================
+# INI command group  (CLI #33–34)
+# ============================================================
+
+@main.group()
+def ini():
+    """Read, patch, and diff Fallout 4 INI configuration files."""
+    pass
+
+
+@ini.command('apply')
+@click.argument('preset', type=click.Choice(PRESET_NAMES, case_sensitive=False))
+@click.option('--game-docs', type=click.Path(),
+              help='Path to Documents/My Games/Fallout4 (auto-detected if omitted)')
+@click.option('--file', 'filename', default='Fallout4Custom.ini', show_default=True,
+              help='Target INI filename (always inside --game-docs)')
+@click.option('--no-backup', is_flag=True, default=False,
+              help='Skip making a timestamped backup before writing')
+def ini_apply(preset, game_docs, filename, no_backup):
+    """Apply a named INI preset to Fallout4Custom.ini.
+
+    Available presets: papyrus_logging, papyrus_logging_off,
+    archive_invalidation, archive_invalidation_off,
+    performance_high, performance_low, f4se_compat.
+
+    Example:
+      mossy ini apply papyrus_logging
+      mossy ini apply archive_invalidation --no-backup
+    """
+    docs_path = Path(game_docs) if game_docs else None
+    patcher = INIPatcher(game_docs_path=docs_path)
+
+    try:
+        written, backup = patcher.apply_preset(
+            preset, filename=filename, backup=not no_backup
+        )
+        if backup:
+            click.echo(f"  Backup  : {backup}")
+        click.echo(f"{Fore.GREEN}✓ Preset '{preset}' applied → {written}{Style.RESET_ALL}")
+
+        # Show what was written
+        ok, problems = patcher.validate_preset_applied(preset, filename=filename)
+        if ok:
+            click.echo(f"  {Fore.GREEN}Verification passed — all settings confirmed.{Style.RESET_ALL}")
+        else:
+            click.echo(f"  {Fore.YELLOW}Verification warnings:{Style.RESET_ALL}")
+            for p in problems[:5]:
+                click.echo(f"    • {p}")
+    except ValueError as exc:
+        click.echo(f"{Fore.RED}✗ {exc}{Style.RESET_ALL}")
+    except Exception as exc:
+        click.echo(f"{Fore.RED}✗ Failed to apply preset: {exc}{Style.RESET_ALL}")
+
+
+@ini.command('diff')
+@click.option('--game-docs', type=click.Path(),
+              help='Path to Documents/My Games/Fallout4 (auto-detected if omitted)')
+@click.option('--file-a', default='Fallout4.ini', show_default=True,
+              help='First INI file to compare')
+@click.option('--file-b', default='Fallout4Custom.ini', show_default=True,
+              help='Second INI file to compare')
+def ini_diff(game_docs, file_a, file_b):
+    """Show differences between two Fallout 4 INI files.
+
+    Compares every section/key and prints keys that differ,
+    are only in A, or are only in B.
+
+    Example:
+      mossy ini diff
+      mossy ini diff --file-a Fallout4.ini --file-b Fallout4Prefs.ini
+    """
+    docs_path = Path(game_docs) if game_docs else None
+    patcher = INIPatcher(game_docs_path=docs_path)
+    diffs = patcher.diff(file_a, file_b)
+
+    if not diffs:
+        click.echo(f"{Fore.GREEN}✓ No differences found between {file_a} and {file_b}.{Style.RESET_ALL}")
+        return
+
+    total = sum(len(keys) for keys in diffs.values())
+    click.echo(f"\n{Fore.CYAN}=== INI Diff: {file_a}  vs  {file_b} "
+               f"({total} difference(s)) ==={Style.RESET_ALL}\n")
+    for section, keys in sorted(diffs.items()):
+        click.echo(f"  [{section}]")
+        for key, (val_a, val_b) in sorted(keys.items()):
+            a_str = repr(val_a) if val_a is not None else f"{Fore.RED}(absent){Style.RESET_ALL}"
+            b_str = repr(val_b) if val_b is not None else f"{Fore.RED}(absent){Style.RESET_ALL}"
+            click.echo(f"    {key}")
+            click.echo(f"      {file_a}: {a_str}")
+            click.echo(f"      {file_b}: {b_str}")
+        click.echo()
+
+
+# ============================================================
+# loadorder esl-candidates  (CLI #35)
+# ============================================================
+
+@loadorder.command('esl-candidates')
+@click.option('--plugins-file', '-p', type=click.Path(exists=True),
+              help='Path to plugins.txt')
+@click.option('--mo2-path', '-m', type=click.Path(),
+              help='Path to MO2 installation (used to locate .esp files for size check)')
+@click.option('--profile', type=str, default=None,
+              help='MO2 profile (used with --mo2-path to read loadorder.txt)')
+@click.option('--size-limit', default=512, show_default=True, type=int,
+              help='Max .esp file size in KB to be considered an ESL candidate')
+def esl_candidates(plugins_file, mo2_path, profile, size_limit):
+    """List .esp plugins that are candidates for ESL-flagging.
+
+    ESL-flagged plugins do not consume one of the 255 plugin slots, which is
+    useful when approaching the plugin cap.  This command uses file size as a
+    heuristic: plugins under SIZE_LIMIT KB are likely within the ESL record
+    limit of 2048 new Form IDs.  Always verify with xEdit before flagging.
+
+    Example:
+      mossy loadorder esl-candidates --plugins-file plugins.txt
+      mossy loadorder esl-candidates --mo2-path C:/MO2 --profile Default
+    """
+    mgr = LoadOrderManager()
+
+    if plugins_file:
+        mgr.load_plugins_txt(Path(plugins_file))
+    elif mo2_path and profile:
+        mo2 = MO2Integration(Path(mo2_path))
+        plugins_enabled = mo2.read_plugins_txt(profile)
+        load_order = mo2.read_loadorder_txt(profile)
+        from mossy_manager.core.load_order import Plugin
+        for name in load_order:
+            mgr.plugins[name] = Plugin(
+                name=name,
+                enabled=plugins_enabled.get(name, True),
+                priority=load_order.index(name) + 1,
+            )
+    else:
+        click.echo(f"{Fore.YELLOW}⚠ Specify --plugins-file or both --mo2-path and --profile.{Style.RESET_ALL}")
+        return
+
+    mods_path = Path(mo2_path) / 'mods' if mo2_path else None
+    candidates = mgr.suggest_esl_candidates(mods_path=mods_path, size_limit_kb=size_limit)
+
+    if not candidates:
+        click.echo(f"{Fore.GREEN}✓ No ESL candidates found (all .esp plugins are above "
+                   f"the {size_limit} KB threshold or already ESL/ESM).{Style.RESET_ALL}")
+        return
+
+    click.echo(f"\n{Fore.CYAN}=== ESL Candidates ({len(candidates)} plugin(s)) ==={Style.RESET_ALL}\n")
+    table = []
+    for c in candidates:
+        size_str = f"{c['size_kb']} KB" if c['size_kb'] is not None else "unknown"
+        table.append([c['plugin'], size_str, c['reason']])
+    click.echo(tabulate(table, headers=["Plugin", "Size", "Note"], tablefmt="simple"))
+    click.echo(f"\n{Fore.YELLOW}⚠ Verify each plugin with xEdit before ESL-flagging.{Style.RESET_ALL}")
+    click.echo(f"  Use: mossy ai script --type esl_flag --plugins <name.esp>\n")
 
 
 if __name__ == '__main__':

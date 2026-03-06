@@ -5,6 +5,7 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 import asyncio
+import queue as stdlib_queue
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -70,14 +71,14 @@ class WebhookRequest(BaseModel):
 
 static_dir = Path(__file__).parent / "static"
 
-# simple progress streaming broadcaster
-_stream_clients: List[asyncio.Queue] = []
+# thread-safe progress broadcaster — works from sync and async contexts
+_stream_clients: List[stdlib_queue.Queue] = []
 
 def send_progress(message: str):
     for q in list(_stream_clients):
         try:
             q.put_nowait(message)
-        except asyncio.QueueFull:
+        except stdlib_queue.Full:
             pass
 
 
@@ -223,17 +224,6 @@ def build_app() -> FastAPI:
             "xedit_result": xedit_result,
         }
 
-        return {
-            "profile": payload.profile,
-            "applied": applied,
-            "backup": backup_path,
-            "issues": issues,
-            "recommendations": recommendations,
-            "current_order": current_order,
-            "optimized_order": optimized,
-            "moved": moved,
-        }
-
     @app.post("/api/conflicts/scan", response_model=ConflictScanResponse)
     def scan_conflicts(payload: ConflictScanRequest):
         send_progress("Starting conflict scan")
@@ -256,7 +246,7 @@ def build_app() -> FastAPI:
 
     @app.get("/api/stream")
     async def stream_progress(request: Request):
-        q: asyncio.Queue = asyncio.Queue()
+        q: stdlib_queue.Queue = stdlib_queue.Queue(maxsize=100)
         _stream_clients.append(q)
 
         async def event_generator():
@@ -264,10 +254,14 @@ def build_app() -> FastAPI:
                 while True:
                     if await request.is_disconnected():
                         break
-                    msg = await q.get()
-                    yield f"data: {msg}\n\n"
+                    try:
+                        msg = q.get_nowait()
+                        yield f"data: {msg}\n\n"
+                    except stdlib_queue.Empty:
+                        await asyncio.sleep(0.05)
             finally:
-                _stream_clients.remove(q)
+                if q in _stream_clients:
+                    _stream_clients.remove(q)
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -285,25 +279,12 @@ def build_app() -> FastAPI:
             "xedit_path": str(xedit_path) if xedit_path else None,
         }
 
-    # version info / update check
+    # version info (fully offline — no network requests)
     @app.get("/api/version", response_model=VersionResponse)
     def get_version():
         import mossy_manager
         current = mossy_manager.__version__
-        latest = current
-        update = False
-        # try contacting GitHub for latest release
-        try:
-            import requests
-            r = requests.get("https://api.github.com/repos/POINTYTHRUNDRA654/Mossy-manager/releases/latest", timeout=2)
-            if r.ok:
-                data = r.json()
-                latest = data.get("tag_name", current)
-                if latest.startswith("v"): latest = latest[1:]
-                update = latest != current
-        except Exception:
-            pass
-        return VersionResponse(current=current, latest=latest, update_available=update)
+        return VersionResponse(current=current, latest=current, update_available=False)
 
     # mod listing and merge endpoints
     @app.get("/api/mods", response_model=ModsListResponse)

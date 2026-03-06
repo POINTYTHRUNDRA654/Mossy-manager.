@@ -139,6 +139,16 @@ test_data/
 *.tmp
 *.bak
 
+# Scratch / debug scripts and test artifacts at repo root
+tmp_test_*.py
+debug_*.py
+dummy*
+xedit_output/
+mossy_scripts/
+mossy_fixes/
+mossy_ai_model/
+patches/
+
 # TypeScript / Node.js
 node_modules/
 *.tsbuildinfo
