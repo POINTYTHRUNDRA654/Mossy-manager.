@@ -1,52 +1,49 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
 PyInstaller spec file for Mossy Manager
-Creates a standalone executable for Windows distribution
+Creates a standalone Windows executable that opens a self-contained desktop UI.
 
-Uses collect_all() for packages with many lazy sub-imports (sklearn, numpy,
-fastapi, starlette, pydantic, anyio) so the bundled exe works at 100% out of
-the box — no separate Python installation required.
+The built executable is intended to be placed in:
+  <MO2 folder>\\tools\\MossyManager\\MossyManager.exe
+
+Add it to MO2 Executables:
+  Title    : Mossy Manager
+  Binary   : <above path>
+  Arguments: (leave blank)
+  Start in : (leave blank)
+
+See UI_MANIFEST (repository root) for the authoritative UI architecture spec.
+DO NOT add uvicorn, fastapi, or webbrowser as the primary UI entry point —
+the desktop GUI (tkinter) is the only interface launched by the executable.
 """
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 import os as _os
 
-# Determine spec directory even when __file__ is missing (PyInstaller+Python 3.14 issue)
 _spec_dir = _os.path.abspath(_os.path.dirname(__file__)) if '__file__' in globals() else _os.getcwd()
 
-# ── Third-party packages that need full collection ─────────────────────────
-# sklearn has hundreds of lazy sub-imports PyInstaller cannot detect statically
+# ── Third-party packages that need full collection ──────────────────────────
 _d_sklearn,  _b_sklearn,  _h_sklearn  = collect_all('sklearn')
 _d_numpy,    _b_numpy,    _h_numpy    = collect_all('numpy')
-_d_fastapi,  _b_fastapi,  _h_fastapi  = collect_all('fastapi')
-_d_starlette,_b_starlette,_h_starlette= collect_all('starlette')
-_d_pydantic, _b_pydantic, _h_pydantic = collect_all('pydantic')
-_d_anyio,    _b_anyio,    _h_anyio    = collect_all('anyio')
-_h_uvicorn                            = collect_submodules('uvicorn')
 
 block_cipher = None
 
 a = Analysis(
-    ['src/mossy_manager/cli/main.py'],
-    # ── pathex must include src/ so mossy_manager package is found ──────────
+    # Entry point: the GUI launcher (opens the desktop window directly)
+    ['MossyManager_gui.py'],
     pathex=[_os.path.join(_spec_dir, 'src')],
     binaries=(
-        _b_sklearn + _b_numpy + _b_fastapi + _b_starlette + _b_pydantic + _b_anyio
+        _b_sklearn + _b_numpy
     ),
     datas=(
         [
-            ('README.md', '.'),
-            ('LICENSE', '.'),
-            # Web UI static assets (loaded at runtime by FastAPI StaticFiles)
-            ('src/mossy_manager/webui/static', 'mossy_manager/webui/static'),
+            ('README.md',    '.'),
+            ('LICENSE',      '.'),
+            ('UI_MANIFEST',  '.'),
         ]
         + _d_sklearn
         + _d_numpy
-        + _d_fastapi
-        + _d_starlette
-        + _d_pydantic
-        + _d_anyio
     ),
     hiddenimports=(
         [
@@ -77,8 +74,14 @@ a = Analysis(
             'mossy_manager.ai.fix_generator',
             'mossy_manager.ai.reasoner',
             'mossy_manager.ai.script_writer',
-            'mossy_manager.webui',
-            'mossy_manager.webui.app',
+            # ── Desktop GUI (tkinter) ──────────────────────────────────────
+            'mossy_manager.gui',
+            'mossy_manager.gui.app',
+            'tkinter',
+            'tkinter.ttk',
+            'tkinter.messagebox',
+            'tkinter.filedialog',
+            'tkinter.font',
             # ── CLI / formatting ──────────────────────────────────────────
             'click',
             'colorama',
@@ -92,31 +95,7 @@ a = Analysis(
             'toml',
             'configparser',
             'json',
-            # ── uvicorn (ASGI server for the web UI) ──────────────────────
-            'uvicorn',
-            'uvicorn.logging',
-            'uvicorn.loops',
-            'uvicorn.loops.auto',
-            'uvicorn.loops.asyncio',
-            'uvicorn.protocols',
-            'uvicorn.protocols.http',
-            'uvicorn.protocols.http.auto',
-            'uvicorn.protocols.http.h11_impl',
-            'uvicorn.protocols.websockets',
-            'uvicorn.protocols.websockets.auto',
-            'uvicorn.lifespan',
-            'uvicorn.lifespan.off',
-            # ── h11 (HTTP/1.1 library used by uvicorn) ────────────────────
-            'h11',
-            'h11._readers',
-            'h11._writers',
-            'h11._events',
-            'h11._connection',
-            'h11._headers',
-            'h11._receivebuffer',
-            'h11._state',
-            'h11._util',
-            # ── Standard library extras sometimes missed by PyInstaller ───
+            # ── Standard library extras ───────────────────────────────────
             'email.mime.text',
             'email.mime.multipart',
             'email.mime.base',
@@ -127,18 +106,13 @@ a = Analysis(
             'pathlib',
             'shutil',
             'subprocess',
-            'webbrowser',
+            'threading',
             'dataclasses',
             'contextlib',
             'functools',
         ]
         + _h_sklearn
         + _h_numpy
-        + _h_fastapi
-        + _h_starlette
-        + _h_pydantic
-        + _h_anyio
-        + _h_uvicorn
     ),
     hookspath=[],
     hooksconfig={},
@@ -148,13 +122,20 @@ a = Analysis(
         '_pytest',
         'setuptools',
         'pip',
-        'torch',       # optional sklearn dep — not installed / not needed
+        'torch',
         'tensorflow',
         'IPython',
         'ipykernel',
         'notebook',
         'matplotlib',
-        'tkinter',
+        # Web server stack — not needed in the standalone desktop exe
+        'uvicorn',
+        'fastapi',
+        'starlette',
+        'pydantic',
+        'anyio',
+        'h11',
+        'httpx',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -178,7 +159,8 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    # windowed=True → no console window pops up alongside the GUI
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

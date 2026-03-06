@@ -5,18 +5,14 @@ Command-line interface for Mossy Manager
 import sys
 import os
 import logging
-import webbrowser
 from pathlib import Path
 from typing import Optional
 import json
 from datetime import datetime, timezone
-import threading
-import time
 
 import click
 from colorama import init, Fore, Style
 from tabulate import tabulate
-import uvicorn
 
 from mossy_manager.core.load_order import LoadOrderManager
 from mossy_manager.core.conflict_resolver import ConflictResolver
@@ -29,7 +25,6 @@ from mossy_manager.integrations.mo2 import MO2Integration
 from mossy_manager.games.fallout4 import Fallout4Rules
 from mossy_manager.config_manager import ConfigManager
 from mossy_manager.mod_manager import ModManager
-from mossy_manager.webui.app import app as web_app
 from mossy_manager.ai.brain import ModAIBrain
 from mossy_manager.ai.reasoner import ModReasoner
 from mossy_manager.ai.script_writer import ScriptWriter
@@ -1221,22 +1216,21 @@ def auto_optimize(mo2_path, profile, game, report, backup, apply):
 
 
 @main.command('ui')
-@click.option('--host', default='127.0.0.1', show_default=True, help='Host to bind the web UI')
-@click.option('--port', default=8732, show_default=True, type=int, help='Port for the web UI')
-@click.option('--open/--no-open', 'open_browser', default=True, show_default=True,
-              help='Automatically open the browser')
-def ui(host, port, open_browser):
-    """Launch the local web UI (LOOT-style page)"""
+@click.option('--mo2-path', '-m', type=click.Path(),
+              help='Path to MO2 installation (auto-detected when omitted)')
+def ui(mo2_path):
+    """Launch the self-contained desktop UI (MO2-style window).
 
-    url = f"http://{host}:{port}/"
-    if open_browser:
-        threading.Thread(target=lambda: (time.sleep(0.8), webbrowser.open(url)), daemon=True).start()
-        click.echo(f"Opening browser at {url}")
-    else:
-        click.echo(f"Start your browser at {url}")
+    Opens a standalone tkinter window — no browser or web server is required.
+    This command is designed to be run directly from Mod Organizer 2 via the
+    MO2 Executables list.
 
-    click.echo("Starting web server... (Ctrl+C to stop)")
-    uvicorn.run(web_app, host=host, port=port, log_level="info")
+    See UI_MANIFEST (repository root) for the authoritative UI architecture
+    specification.  This command MUST NOT start a web server.
+    """
+    from mossy_manager.gui.app import launch
+    click.echo(f"{Fore.CYAN}Launching Mossy Manager desktop UI…{Style.RESET_ALL}")
+    launch(mo2_path=mo2_path)
 
 
 @main.command()
@@ -1249,13 +1243,14 @@ def info():
 
 {Fore.GREEN}Version:{Style.RESET_ALL} 1.0.0
 {Fore.GREEN}Game:{Style.RESET_ALL} Fallout 4
+{Fore.GREEN}UI:{Style.RESET_ALL} Self-contained desktop window (tkinter)
 
 {Fore.CYAN}Features:{Style.RESET_ALL}
   • Load Order Management - Organize and optimize Fallout 4 plugin load order
   • Conflict Resolution - Detect and analyze mod conflicts
   • Patching System - Create and apply compatibility patches
   • xEdit Integration - Launch FO4Edit for advanced conflict resolution
-  • Web UI - Browser-based LOOT-style interface (mossy ui)
+  • Desktop UI - Self-contained MO2-style window (no browser required)
 
 {Fore.CYAN}Commands:{Style.RESET_ALL}
   loadorder      - Manage plugin load order (list, validate, optimize, auto-fo4)
@@ -1263,21 +1258,28 @@ def info():
   patch          - Create and apply patches (create, list, apply, create-xedit)
   fallout4       - Fallout 4 specific commands (optimize)
   auto           - Complete automatic workflow: optimize + conflict detection
-  ui             - Launch the local web UI
+  ui             - Launch the self-contained desktop UI (MO2-style window)
   info           - Display this information
 
 {Fore.CYAN}Quick Start:{Style.RESET_ALL}
-  1. Auto-optimize Fallout 4 load order:
+  1. Launch the desktop UI:
+     mossy ui
+
+  2. Auto-optimize Fallout 4 load order:
      mossy loadorder auto-fo4 --profile "Default"
 
-  2. Scan for conflicts:
+  3. Scan for conflicts:
      mossy conflicts scan --mods-dir path/to/mods
 
-  3. Full automatic workflow:
+  4. Full automatic workflow:
      mossy auto --profile "Default" --apply
 
-  4. Launch web UI:
-     mossy ui
+{Fore.CYAN}Running from MO2:{Style.RESET_ALL}
+  Add MossyManager.exe to MO2 Executables:
+    Title    : Mossy Manager
+    Binary   : <MO2 folder>\\tools\\MossyManager\\MossyManager.exe
+    Arguments: (leave blank — the window opens automatically)
+    Start in : (leave blank)
 
 {Fore.CYAN}Documentation:{Style.RESET_ALL}
   https://github.com/POINTYTHRUNDRA654/Mossy-manager.
