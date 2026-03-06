@@ -397,3 +397,39 @@ class TestGuiEntryPoint:
         assert version_line < first_gui_import, (
             "--version check must appear BEFORE any GUI/backend imports"
         )
+
+    def test_entry_point_has_startup_error_handling(self):
+        """launch() must be wrapped in a try/except to prevent silent crashes.
+
+        When the exe is built with console=False, any unhandled exception causes
+        a completely silent, invisible crash — the user sees nothing happen when
+        they click Run in MO2.  This test verifies the entry point catches errors
+        and attempts to display them.
+        """
+        src = (REPO_ROOT / "MossyManager_gui.py").read_text()
+        assert "try:" in src, "entry point must have a try block around launch()"
+        assert "except Exception" in src or "except Exception as" in src, (
+            "entry point must catch Exception (not just bare except)"
+        )
+        # The error handler should attempt to show a messagebox
+        assert "showerror" in src, (
+            "entry point must call showerror() to show startup errors to the user"
+        )
+
+    def test_entry_point_no_non_bmp_emoji_in_gui_source(self):
+        """GUI source must not use non-BMP characters (codepoints > U+FFFF).
+
+        Non-BMP characters (emoji with codepoints above U+FFFF, such as U+1F50D 🔍)
+        can cause silent crashes in some Python/Windows/tkinter combinations because
+        they require surrogate pairs in UTF-16.  All toolbar icons must stay in the
+        Basic Multilingual Plane.
+        """
+        gui_src = (REPO_ROOT / "src" / "mossy_manager" / "gui" / "app.py").read_text()
+        for i, ch in enumerate(gui_src):
+            if ord(ch) > 0xFFFF:
+                context = gui_src[max(0, i - 20):i + 20]
+                raise AssertionError(
+                    f"Non-BMP character U+{ord(ch):04X} ({ch!r}) found in "
+                    f"gui/app.py near: {context!r}. "
+                    "Replace with a BMP-safe symbol to prevent silent startup crashes."
+                )
