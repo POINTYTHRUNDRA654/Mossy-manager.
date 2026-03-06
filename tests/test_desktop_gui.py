@@ -326,6 +326,7 @@ class TestCLIInfoCommand:
         assert "Web UI" not in result.output
 
 
+
 # ---------------------------------------------------------------------------
 # MossyManager_gui.py entry-point script
 # ---------------------------------------------------------------------------
@@ -341,3 +342,58 @@ class TestGuiEntryPoint:
     def test_entry_point_has_main_guard(self):
         text = (REPO_ROOT / "MossyManager_gui.py").read_text()
         assert '__name__ == "__main__"' in text or "__name__ == '__main__'" in text
+
+    def test_entry_point_version_flag_exits_zero(self):
+        """--version must exit 0 without opening a GUI (critical for CI smoke tests)."""
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "MossyManager_gui.py"), "--version"],
+            capture_output=True, text=True, timeout=15,
+        )
+        assert result.returncode == 0, (
+            f"--version exited {result.returncode}:\n{result.stderr}"
+        )
+        assert "1.0.0" in result.stdout or "Mossy Manager" in result.stdout
+
+    def test_entry_point_help_flag_exits_zero(self):
+        """--help must exit 0 without opening a GUI."""
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "MossyManager_gui.py"), "--help"],
+            capture_output=True, text=True, timeout=15,
+        )
+        assert result.returncode == 0, (
+            f"--help exited {result.returncode}:\n{result.stderr}"
+        )
+        assert "Usage" in result.stdout or "MO2" in result.stdout
+
+    def test_entry_point_version_short_flag(self):
+        """-V short flag must also exit 0 and print version."""
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "MossyManager_gui.py"), "-V"],
+            capture_output=True, text=True, timeout=15,
+        )
+        assert result.returncode == 0
+        assert "1.0.0" in result.stdout or "Mossy Manager" in result.stdout
+
+    def test_entry_point_version_before_gui_imports(self):
+        """--version must not require tkinter or a display (early-exit pattern)."""
+        src = (REPO_ROOT / "MossyManager_gui.py").read_text()
+        lines = src.splitlines()
+        # Find the line that checks for --version
+        version_line = next(
+            (i for i, l in enumerate(lines) if "--version" in l and "in _args" in l),
+            None,
+        )
+        # Find the first import of mossy_manager or tkinter
+        first_gui_import = next(
+            (i for i, l in enumerate(lines)
+             if "from mossy_manager" in l or "import tkinter" in l),
+            None,
+        )
+        assert version_line is not None, "entry point must check --version flag"
+        assert first_gui_import is not None, "entry point must import launch"
+        assert version_line < first_gui_import, (
+            "--version check must appear BEFORE any GUI/backend imports"
+        )

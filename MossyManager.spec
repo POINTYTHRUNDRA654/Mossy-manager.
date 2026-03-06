@@ -128,7 +128,7 @@ a = Analysis(
         'ipykernel',
         'notebook',
         'matplotlib',
-        # Web server stack is NOT included in the desktop executable
+        # Web server stack — not needed in the standalone desktop exe
         'uvicorn',
         'fastapi',
         'starlette',
@@ -136,7 +136,6 @@ a = Analysis(
         'anyio',
         'h11',
         'httpx',
-        'webbrowser',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
