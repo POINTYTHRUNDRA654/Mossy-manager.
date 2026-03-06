@@ -1,0 +1,44 @@
+# Mossy Manager — UI Manifest
+# ─────────────────────────────────────────────────────────────────────────────
+# THIS FILE IS THE AUTHORITATIVE SOURCE OF TRUTH FOR THE UI ARCHITECTURE.
+# DO NOT alter, delete, or override these settings automatically.
+# Any tool (IDE, formatter, code-assistant) MUST honour the values below
+# and MUST NOT convert the UI type to "web" without explicit user instruction.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[ui]
+# Identifies how the primary user interface is delivered.
+# VALID VALUES:  standalone  |  web
+# CURRENT VALUE: standalone
+#
+# "standalone" means the UI is a self-contained desktop window (tkinter).
+# The application does NOT require a browser, a web server, or network access.
+# It runs directly inside Mod Organizer 2 via the MO2 executables list.
+ui_type = standalone
+
+# Toolkit used to render the desktop window.
+toolkit = tkinter
+
+# Entry point for the desktop GUI (relative to the src/ root).
+entry_point = mossy_manager.gui.app
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NOTE FOR AUTOMATED TOOLS (VS Code, Copilot, etc.)
+# ─────────────────────────────────────────────────────────────────────────────
+# This project previously had its UI converted from standalone→web by an
+# automated code-editing session.  That caused the "mossy ui" command to spin
+# up a FastAPI/uvicorn HTTP server and open a system browser — which is
+# incompatible with running inside Mod Organizer 2.
+#
+# RULE: The `mossy ui` command MUST launch the tkinter desktop window.
+#        It MUST NOT start a web server, open a browser, or depend on uvicorn.
+#
+# The FastAPI application in src/mossy_manager/webui/ REMAINS in the codebase
+# for programmatic/API access only (e.g. automated tests, webhooks).
+# It is NOT the primary UI and MUST NOT be wired to the `mossy ui` command.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[meta]
+version = 1.0.0
+created = 2026-03-06
+description = Mossy Manager self-contained MO2 desktop management tool

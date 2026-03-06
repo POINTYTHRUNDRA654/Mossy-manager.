@@ -94,7 +94,7 @@ def main():
                 "[General]\n"
                 "name=Mossy Manager\n"
                 f"path={exe_name}\n"
-                "args=auto --profile \"Default\"\n"
+                "args=\n"
                 "workDir=\n"
             )
             with open(sample_ini, 'w', encoding='utf-8') as f:
