@@ -1,0 +1,11 @@
+# Mossy Manager - Load Order
+Skyrim.esm
+Update.esm
+Dawnguard.esm
+HearthFires.esm
+Dragonborn.esm
+SkyUI.esp
+SMIM.esp
+EnhancedLights.esp
+WeatherMod.esp
+TextureMod.esp

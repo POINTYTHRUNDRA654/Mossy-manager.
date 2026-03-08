@@ -1,0 +1,148 @@
+name: Publish Latest Executable
+
+# Runs on every push to main.
+# Builds MossyManager.exe and updates the "latest" pre-release so users
+# always have a ready-to-download executable without waiting for a tagged
+# version release.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}  # Allow manual trigger from the Actions tab
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          pip install -e .
+
+      - name: Build MossyManager.exe
+        run: python build.py
+
+      # ── Smoke-tests: verify the exe starts and exits cleanly ─────────────
+      # These run without a display — the flags exit before opening any window.
+      - name: Smoke-test — version flag
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath ".\dist\MossyManager.exe" `
+               -ArgumentList "--version" -Wait -PassThru -WindowStyle Hidden
+          Write-Host "Exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) {
+            Write-Error "Smoke test FAILED (exit $($p.ExitCode))"
+            exit 1
+          }
+          Write-Host "Smoke test passed."
+
+      - name: Smoke-test — help flag
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath ".\dist\MossyManager.exe" `
+               -ArgumentList "--help" -Wait -PassThru -WindowStyle Hidden
+          if ($p.ExitCode -ne 0) {
+            Write-Error "Smoke test FAILED (exit $($p.ExitCode))"
+            exit 1
+          }
+
+      # ── Zip the MO2 package for a single-file download ───────────────────
+      - name: Zip MO2 Tools Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist\MO2_Tools_Package\*" `
+            -DestinationPath "dist\MO2_Tools_Package.zip" -Force
+
+      - name: Upload executable as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MossyManager-Windows-latest
+          path: dist/MossyManager.exe
+
+      - name: Upload MO2 package as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MO2_Tools_Package
+          path: dist/MO2_Tools_Package.zip
+
+      # Delete the existing "latest" pre-release and recreate it so the
+      # attached asset is always the most recent build.
+      - name: Delete existing "latest" release (if any)
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>$null
+          if ($LASTEXITCODE -ne 0) { $true }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+
+      - name: Create "latest" pre-release with MossyManager.exe
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest Build (auto-updated)"
+          body: |
+            ## Latest Build
+
+            This release is **automatically updated** on every push to `main`.
+            It always contains the most recent `MossyManager.exe`.
+
+            > Every build is smoke-tested before being published here,
+            > so this exe is verified to start correctly.
+
+            ---
+
+            ### 📥 Download
+
+            | File | Description |
+            |------|-------------|
+            | **MossyManager.exe** | Standalone executable — double-click to run, or add to MO2 |
+            | **MO2_Tools_Package.zip** | Ready-to-drop-into-MO2 package (exe + `MossyManager.ini`) |
+
+            ---
+
+            ### 🎮 Adding to Mod Organizer 2
+
+            1. Download `MossyManager.exe` (or unzip `MO2_Tools_Package.zip`) and save it
+               somewhere permanent, e.g. `C:\Games\MO2\tools\MossyManager\MossyManager.exe`.
+            2. Open **Mod Organizer 2**.
+            3. Click the **gear icon** (⚙) → **Executables** → **+**.
+            4. Fill in:
+
+               | Field     | Value                                    |
+               |-----------|------------------------------------------|
+               | Title     | `Mossy Manager`                          |
+               | Binary    | Browse to `MossyManager.exe`             |
+               | Arguments | *(leave blank)*                          |
+               | Start in  | *(leave blank — auto-detects MO2)*       |
+
+            5. Click **OK**, then select **Mossy Manager** from the Run dropdown and click **Run**.
+
+            The desktop window opens and lets you view your plugin list, optimize
+            load order, scan for conflicts, and get AI recommendations — no browser needed.
+
+            ---
+
+            ### For versioned/stable releases
+            See the [Releases page](../../releases) for tagged versions.
+          prerelease: true
+          files: |
+            dist/MossyManager.exe
+            dist/MO2_Tools_Package.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
