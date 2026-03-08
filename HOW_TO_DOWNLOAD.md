@@ -25,7 +25,7 @@ This guide explains the different ways to get Mossy Manager and start testing.
 3. Click **+** and fill in:
    - **Title**: `Mossy Manager`
    - **Binary**: Browse to `MossyManager.exe`
-   - **Arguments**: `auto --profile "Default"` *(change profile name as needed)*
+   - **Arguments**: *(leave blank — the desktop window opens automatically)*
    - **Start in**: *(leave blank)*
 4. Click **OK**, then select **Mossy Manager** from the Run dropdown and click **Run**.
 
