@@ -234,6 +234,7 @@ class DesktopApp:
         self._profiles: List[str] = []
         self._load_order: List[str] = []
         self._enabled: Dict[str, bool] = {}
+        self._last_optimized: Optional[List[str]] = None  # Store last optimization result
 
         # Tk root
         self._root = tk.Tk()
@@ -303,10 +304,19 @@ class DesktopApp:
                  bg=PALETTE["bg_dark"], fg=PALETTE["text_dim"],
                  font=_FONT_SMALL, relief="flat",
                  padx=6, pady=2).pack(side=tk.RIGHT, padx=4, pady=4)
-        tk.Label(bar, textvariable=self._sv_mo2_path,
+
+        # MO2 path with browse button
+        mo2_frame = tk.Frame(bar, bg=PALETTE["bg_dark"])
+        mo2_frame.pack(side=tk.RIGHT, padx=4, pady=4)
+
+        self._btn_browse_mo2 = ttk.Button(mo2_frame, text="📁", width=3,
+                                           command=self._browse_mo2_path)
+        self._btn_browse_mo2.pack(side=tk.RIGHT, padx=(4, 0))
+
+        tk.Label(mo2_frame, textvariable=self._sv_mo2_path,
                  bg=PALETTE["bg_dark"], fg=PALETTE["text_dim"],
                  font=_FONT_SMALL, relief="flat",
-                 padx=6, pady=2).pack(side=tk.RIGHT, padx=4, pady=4)
+                 padx=6, pady=2).pack(side=tk.RIGHT)
 
     def _build_toolbar(self, parent: tk.Widget) -> None:
         bar = tk.Frame(parent, background=PALETTE["bg_toolbar"], height=36)
@@ -496,6 +506,22 @@ class DesktopApp:
         _, body_order = self._section(inner, "Optimized Load Order Preview")
         self._txt_results = self._scrolled_text(body_order, height=10)
 
+        # Add "Apply Load Order" button (hidden initially)
+        btn_frame = tk.Frame(body_order, background=PALETTE["bg_panel"])
+        btn_frame.pack(fill=tk.X, pady=(6, 0))
+
+        self._btn_apply_load_order = ttk.Button(
+            btn_frame,
+            text="📝 Apply This Load Order",
+            command=self._apply_last_optimization,
+            style="Accent.TButton"
+        )
+        self._btn_apply_load_order.pack(side=tk.LEFT, padx=4)
+
+        # Initially hide the button
+        btn_frame.pack_forget()
+        self._apply_button_frame = btn_frame
+
         _, body_rec = self._section(inner, "Recommendations")
         self._txt_recs = self._scrolled_text(body_rec, height=5)
 
@@ -616,11 +642,29 @@ class DesktopApp:
         if not self._backend:
             return None
         MO2 = self._backend["MO2Integration"]
+
+        # 1. Use override if provided (from command line or manual browse)
         if self._mo2_path_override:
-            return MO2(Path(self._mo2_path_override))
+            return MO2(Path(self._mo2_path_override), game_name='Fallout 4')
+
+        # 2. Try auto-detection
         detected = MO2.detect_mo2_installation()
         if detected:
-            return MO2(detected)
+            return MO2(detected, game_name='Fallout 4')
+
+        # 3. Try loading from saved config
+        try:
+            config_file = Path.home() / ".mossy_manager" / "config.yaml"
+            if config_file.exists():
+                import yaml
+                config = yaml.safe_load(config_file.read_text())
+                if config and 'mo2_path' in config:
+                    saved_path = Path(config['mo2_path'])
+                    if saved_path.exists() and (saved_path / "ModOrganizer.exe").exists():
+                        return MO2(saved_path, game_name='Fallout 4')
+        except Exception:
+            pass
+
         return None
 
     # ------------------------------------------------------------------
@@ -637,6 +681,58 @@ class DesktopApp:
         )
         if path:
             self._sv_xedit_p.set(path)
+
+    def _browse_mo2_path(self) -> None:
+        """Browse for MO2 installation directory."""
+        path = filedialog.askdirectory(
+            title="Select Mod Organizer 2 Installation Folder",
+            mustexist=True
+        )
+        if path:
+            mo2_path = Path(path)
+
+            # Verify it's a valid MO2 installation
+            mo2_exe = mo2_path / "ModOrganizer.exe"
+            if not mo2_exe.exists():
+                messagebox.showerror(
+                    "Invalid MO2 Path",
+                    f"ModOrganizer.exe not found in:\n{mo2_path}\n\n"
+                    f"Please select the folder containing ModOrganizer.exe"
+                )
+                return
+
+            # Save to config
+            try:
+                config_dir = Path.home() / ".mossy_manager"
+                config_dir.mkdir(parents=True, exist_ok=True)
+                config_file = config_dir / "config.yaml"
+
+                import yaml
+                if config_file.exists():
+                    config = yaml.safe_load(config_file.read_text()) or {}
+                else:
+                    config = {}
+
+                config['mo2_path'] = str(mo2_path)
+                config_file.write_text(yaml.dump(config))
+
+                # Update override and reload
+                self._mo2_path_override = str(mo2_path)
+                self._mo2 = None  # Clear cached MO2 instance
+
+                messagebox.showinfo(
+                    "MO2 Path Set",
+                    f"MO2 path set to:\n{mo2_path}\n\nReloading..."
+                )
+
+                # Reload MO2 info
+                self._load_mo2_info()
+
+            except Exception as e:
+                messagebox.showerror(
+                    "Failed to Save",
+                    f"Could not save MO2 path to config:\n{e}"
+                )
 
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
@@ -781,8 +877,14 @@ class DesktopApp:
 
                 rules = self._backend["Fallout4Rules"]
                 issues = rules.validate_load_order(lo)
-                optimized = rules.optimize_load_order(lo)
+
+                # Get Data path for reading plugin dependencies
+                data_path = self._mo2.get_game_data_path() if hasattr(self._mo2, 'get_game_data_path') else None
+                optimized = rules.optimize_load_order(lo, data_path=data_path)
                 recommendations = rules.get_recommendations(optimized)
+
+                # Store optimized order for later application
+                self._last_optimized = optimized
 
                 errors   = len(issues.get("errors",   []))
                 warnings = len(issues.get("warnings", []))
@@ -794,6 +896,7 @@ class DesktopApp:
                 if len(optimized) > 40:
                     preview += f"\n    … and {len(optimized) - 40} more"
 
+                applied = False  # Track if we applied automatically
                 if self._var_apply.get():
                     if self._var_backup.get():
                         prof_path = self._mo2.get_profile_path(profile)
@@ -806,6 +909,7 @@ class DesktopApp:
                         profile, {p: plugins_enabled.get(p, True) for p in optimized})
                     self._mo2.write_loadorder_txt(profile, optimized)
                     status_msg = "Applied"
+                    applied = True
                 else:
                     status_msg = "Preview (dry-run)"
 
@@ -826,6 +930,11 @@ class DesktopApp:
                     self._set_status(
                         status_msg,
                         PALETTE["success"] if not errors else PALETTE["warn"])
+                    # Show "Apply Load Order" button if we didn't auto-apply
+                    if not applied:
+                        self._apply_button_frame.pack(fill=tk.X, pady=(6, 0))
+                    else:
+                        self._apply_button_frame.pack_forget()
                     self._notebook.select(0)
                     self._refresh_load_order()
 
@@ -835,6 +944,70 @@ class DesktopApp:
                 self._root.after(0, lambda: (
                     self._set_status(str(exc), PALETTE["danger"]),
                     messagebox.showerror("Optimize error", str(exc)),
+                ))
+
+        self._run_in_thread(_do)
+
+    def _apply_last_optimization(self) -> None:
+        """Apply the last calculated optimized load order"""
+        if not self._last_optimized:
+            messagebox.showwarning("No Optimization", "No optimized load order to apply. Run optimization first.")
+            return
+
+        profile = self._sv_profile.get()
+        if not profile or not self._mo2:
+            messagebox.showwarning("No profile", "Select an MO2 profile first.")
+            return
+
+        # Confirm with user
+        msg = (
+            f"Apply optimized load order with {len(self._last_optimized)} plugins?\n\n"
+            f"This will:\n"
+            f"• Create a backup of your current profile\n"
+            f"• Update loadorder.txt and plugins.txt\n"
+            f"• Preserve enabled/disabled state of plugins\n\n"
+            f"Continue?"
+        )
+        if not messagebox.askyesno("Confirm Apply", msg):
+            return
+
+        def _do():
+            try:
+                self._root.after(0, lambda: self._set_status(
+                    "Applying load order…", PALETTE["warn"]))
+
+                # Create backup
+                prof_path = self._mo2.get_profile_path(profile)
+                backup_name = "(unknown)"
+                if prof_path:
+                    ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+                    backup_path = prof_path.parent / f"{profile}_backup_{ts}"
+                    shutil.copytree(prof_path, backup_path)
+                    backup_name = backup_path.name
+                    logger.info(f"Created backup: {backup_path}")
+
+                # Apply the load order
+                plugins_enabled = self._mo2.read_plugins_txt(profile)
+                optimized_plugins = {p: plugins_enabled.get(p, True) for p in self._last_optimized}
+
+                self._mo2.write_plugins_txt(profile, optimized_plugins)
+                self._mo2.write_loadorder_txt(profile, self._last_optimized)
+
+                self._root.after(0, lambda bn=backup_name: (
+                    self._set_status("Load order applied successfully", PALETTE["success"]),
+                    self._sv_stat_status.set("Applied"),
+                    self._apply_button_frame.pack_forget(),  # Hide button after applying
+                    self._refresh_load_order(),
+                    messagebox.showinfo("Success",
+                        f"Load order applied successfully!\n\n"
+                        f"Backup created at:\n{bn}")
+                ))
+
+            except Exception as exc:
+                logger.error(f"Error applying load order: {exc}", exc_info=True)
+                self._root.after(0, lambda e=str(exc): (
+                    self._set_status(f"Error: {e}", PALETTE["danger"]),
+                    messagebox.showerror("Apply Error", f"Failed to apply load order:\n\n{e}")
                 ))
 
         self._run_in_thread(_do)
@@ -975,10 +1148,62 @@ class DesktopApp:
                 messagebox.showwarning("No selection", "Select at least one mod.")
                 return
             chosen = [lb.get(i) for i in sel]
-            # TODO: invoke the real merge backend (Patcher / MergeRequest) once
-            # the merge pipeline is wired to the desktop GUI.  For now this
-            # confirms the user's selection so the workflow is usable.
-            self._sv_merge_status.set(f"Merged: {', '.join(chosen)}")
+
+            # Basic merge implementation: create a new merged mod folder
+            try:
+                if not self._backend or not self._mo2:
+                    self._sv_merge_status.set("Error: MO2 not detected")
+                    return
+
+                mods_dir = self._mo2.mods_path
+                if not mods_dir or not Path(str(mods_dir)).exists():
+                    self._sv_merge_status.set("Error: Mods directory not found")
+                    return
+
+                # Create merged mod name
+                merge_name = f"MossyMerge_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+                merge_path = Path(str(mods_dir)) / merge_name
+
+                # Create merge directory
+                merge_path.mkdir(parents=True, exist_ok=True)
+
+                # Copy files from each selected mod to the merged mod
+                total_files = 0
+                for mod_name in chosen:
+                    mod_path = Path(str(mods_dir)) / mod_name
+                    if not mod_path.exists():
+                        continue
+
+                    # Copy all files from this mod to the merge (simple file copy)
+                    import shutil
+                    for item in mod_path.rglob('*'):
+                        if item.is_file():
+                            rel_path = item.relative_to(mod_path)
+                            dest = merge_path / rel_path
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(item, dest)
+                            total_files += 1
+
+                # Create a metadata file
+                meta_file = merge_path / "meta.ini"
+                meta_content = (
+                    "[General]\n"
+                    f"version=1.0\n"
+                    f"installationFile={merge_name}\n"
+                    f"comments=Merged mod created by Mossy Manager from: {', '.join(chosen)}\n"
+                    f"created={datetime.now(timezone.utc).isoformat()}\n"
+                )
+                meta_file.write_text(meta_content, encoding='utf-8')
+
+                self._sv_merge_status.set(
+                    f"✓ Merge complete: {merge_name} ({total_files} files from {len(chosen)} mods)"
+                )
+                dlg.destroy()
+
+            except Exception as e:
+                logger.exception(f"Merge error: {e}")
+                self._sv_merge_status.set(f"Merge failed: {str(e)}")
+
 
         ttk.Button(footer, text="⊕ Merge", style="Primary.TButton",
                    command=_do_merge).pack(side=tk.RIGHT, padx=6, pady=6)

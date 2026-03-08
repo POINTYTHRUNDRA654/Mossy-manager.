@@ -186,7 +186,7 @@ def validate_loadorder(plugins_file, loadorder_file):
     else:
         click.echo(f"{Fore.RED}✗ Load order has issues:{Style.RESET_ALL}\n")
         for issue in issues:
-            click.echo(f"  • {issue}")
+            click.echo(f"  * {issue}")
 
 
 @loadorder.command('optimize')
@@ -267,7 +267,7 @@ def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run,
     MO2's `_active_profile.txt` marker. This makes it convenient when running
     from inside MO2 where the active profile is already selected.
     """
-    click.echo(f"{Fore.CYAN}═ Fallout 4 Load Order Auto-Optimize ═{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}= Fallout 4 Load Order Auto-Optimize ={Style.RESET_ALL}")
 
     # Detect MO2
     if mo2_path:
@@ -295,7 +295,7 @@ def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run,
         if profiles:
             click.echo("Available profiles:")
             for p in profiles:
-                click.echo(f"  • {p}")
+                click.echo(f"  * {p}")
         return
 
     # Read current state
@@ -307,7 +307,7 @@ def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run,
 
     # optional conflict scan ahead of optimization
     if scan_conflicts or resolve_xedit:
-        click.echo(f"{Fore.CYAN}╔═════════ Checking conflicts before optimization ═════════╗{Style.RESET_ALL}")
+        click.echo(f"{Fore.CYAN}+========= Checking conflicts before optimization =========+{Style.RESET_ALL}")
         resolver = ConflictResolver(Path(mo2.mods_path or '.'))
         # scan each mod folder within mo2
         mods_root = Path(mo2.mods_path or '.')
@@ -335,7 +335,8 @@ def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run,
 
     # Validate and optimize
     issues = Fallout4Rules.validate_load_order(current_order)
-    optimized = Fallout4Rules.optimize_load_order(current_order)
+    data_path = mo2.get_game_data_path() if hasattr(mo2, 'get_game_data_path') else None
+    optimized = Fallout4Rules.optimize_load_order(current_order, data_path=data_path)
 
     moved = []
     index_map = {name: i for i, name in enumerate(current_order)}
@@ -354,19 +355,19 @@ def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run,
     if issues['errors']:
         click.echo(f"{Fore.RED}Errors:{Style.RESET_ALL}")
         for err in issues['errors'][:5]:
-            click.echo(f"  • {err}")
+            click.echo(f"  * {err}")
         if len(issues['errors']) > 5:
             click.echo(f"  ... and {len(issues['errors']) - 5} more")
     if issues['warnings']:
         click.echo(f"{Fore.YELLOW}Warnings:{Style.RESET_ALL}")
         for warn in issues['warnings'][:5]:
-            click.echo(f"  • {warn}")
+            click.echo(f"  * {warn}")
         if len(issues['warnings']) > 5:
             click.echo(f"  ... and {len(issues['warnings']) - 5} more")
     if recommendations:
         click.echo(f"{Fore.CYAN}Recommendations:{Style.RESET_ALL}")
         for rec in recommendations[:5]:
-            click.echo(f"  • {rec}")
+            click.echo(f"  * {rec}")
 
     if dry_run:
         click.echo(f"{Fore.YELLOW}Dry-run: no files written.{Style.RESET_ALL}")
@@ -389,7 +390,7 @@ def auto_fo4_loadorder(mo2_path, profile, backup, report, dry_run,
 
         # after successful write, optionally resolve with xEdit
         if resolve_xedit:
-            click.echo(f"{Fore.CYAN}╔═════════ Exporting conflicts to xEdit ═════════╗{Style.RESET_ALL}")
+            click.echo(f"{Fore.CYAN}+========= Exporting conflicts to xEdit =========+{Style.RESET_ALL}")
             # prepare xEdit integration (reuse conflict scan results)
             xedit = XEditIntegration(xedit_path=xedit_path)
             # invoke high-level helper which handles export/script/launch
@@ -507,9 +508,9 @@ def resolve_xedit(mods_dir, mo2_path, xedit_path, game, patch_name, output_dir, 
     generates a helper script, and optionally launches xEdit for
     interactive conflict resolution.
     """
-    click.echo(f"{Fore.CYAN}╔═══════════════════════════════════════════════════════════╗{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}║     xEdit Conflict Resolution - Mossy Manager            ║{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    click.echo(f"{Fore.CYAN}+===========================================================+{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}|     xEdit Conflict Resolution - Mossy Manager            |{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}+===========================================================+{Style.RESET_ALL}\n")
     
     # Initialize conflict resolver and config
     resolver = ConflictResolver(Path(mods_dir))
@@ -736,13 +737,13 @@ def apply_patch(patch_file, mod_dir, dry_run):
     if not validation['valid']:
         click.echo(f"\n{Fore.RED}Validation failed:{Style.RESET_ALL}")
         for error in validation['errors']:
-            click.echo(f"  • {error}")
+            click.echo(f"  * {error}")
         return
     
     if validation['warnings']:
         click.echo(f"\n{Fore.YELLOW}Warnings:{Style.RESET_ALL}")
         for warning in validation['warnings']:
-            click.echo(f"  • {warning}")
+            click.echo(f"  * {warning}")
     
     # Apply the patch
     result = patcher.apply_patch(patch, Path(mod_dir), dry_run)
@@ -758,7 +759,7 @@ def apply_patch(patch_file, mod_dir, dry_run):
         if result['errors']:
             click.echo("\nErrors:")
             for error in result['errors']:
-                click.echo(f"  • {error}")
+                click.echo(f"  * {error}")
 
 
 @patch.command('create-xedit')
@@ -782,9 +783,9 @@ def create_patch_xedit(name, description, xedit_path, game, target_plugin,
     This creates a new patch in Mossy Manager format and generates
     xEdit-compatible files for editing in xEdit.
     """
-    click.echo(f"{Fore.CYAN}╔═══════════════════════════════════════════════════════════╗{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}║        Create Patch with xEdit - Mossy Manager           ║{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    click.echo(f"{Fore.CYAN}+===========================================================+{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}|        Create Patch with xEdit - Mossy Manager           |{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}+===========================================================+{Style.RESET_ALL}\n")
     
     # Create patch in Mossy Manager
     click.echo(f"{Fore.CYAN}Step 1: Creating patch in Mossy Manager...{Style.RESET_ALL}")
@@ -932,9 +933,9 @@ def fo4_optimize(mo2_path, profile, backup):
     from mossy_manager.integrations.mo2 import MO2Integration
     from mossy_manager.games.fallout4 import Fallout4Rules
     
-    click.echo(f"{Fore.CYAN}╔═══════════════════════════════════════════════════════════╗{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}║     Fallout 4 Load Order Optimization - Mossy Manager    ║{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    click.echo(f"{Fore.CYAN}+===========================================================+{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}|     Fallout 4 Load Order Optimization - Mossy Manager    |{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}+===========================================================+{Style.RESET_ALL}\n")
     
     # Initialize MO2 integration
     if mo2_path:
@@ -956,7 +957,7 @@ def fo4_optimize(mo2_path, profile, backup):
         click.echo(f"{Fore.RED}Error: Profile '{profile}' not found{Style.RESET_ALL}")
         click.echo(f"\nAvailable profiles:")
         for p in profiles:
-            click.echo(f"  • {p}")
+            click.echo(f"  * {p}")
         return
     
     click.echo(f"{Fore.CYAN}Profile: {profile}{Style.RESET_ALL}\n")
@@ -991,12 +992,12 @@ def fo4_optimize(mo2_path, profile, backup):
     if issues['errors']:
         click.echo(f"  {Fore.RED}Errors found:{Style.RESET_ALL}")
         for error in issues['errors']:
-            click.echo(f"    • {error}")
+            click.echo(f"    * {error}")
     
     if issues['warnings']:
         click.echo(f"  {Fore.YELLOW}Warnings:{Style.RESET_ALL}")
         for warning in issues['warnings'][:5]:  # Show first 5
-            click.echo(f"    • {warning}")
+            click.echo(f"    * {warning}")
         if len(issues['warnings']) > 5:
             click.echo(f"    ... and {len(issues['warnings']) - 5} more")
     
@@ -1005,7 +1006,8 @@ def fo4_optimize(mo2_path, profile, backup):
     
     # Optimize load order
     click.echo(f"\n{Fore.CYAN}Step 4: Optimizing load order...{Style.RESET_ALL}")
-    optimized = Fallout4Rules.optimize_load_order(current_loadorder)
+    data_path = mo2.get_game_data_path() if hasattr(mo2, 'get_game_data_path') else None
+    optimized = Fallout4Rules.optimize_load_order(current_loadorder, data_path=data_path)
     
     # Show changes
     changes = 0
@@ -1021,7 +1023,7 @@ def fo4_optimize(mo2_path, profile, backup):
     if recommendations:
         click.echo(f"\n{Fore.CYAN}Recommendations:{Style.RESET_ALL}")
         for rec in recommendations[:3]:
-            click.echo(f"  • {rec}")
+            click.echo(f"  * {rec}")
     
     # Write optimized load order
     click.echo(f"\n{Fore.CYAN}Step 5: Writing optimized load order...{Style.RESET_ALL}")
@@ -1036,7 +1038,7 @@ def fo4_optimize(mo2_path, profile, backup):
     
     if success1 and success2:
         click.echo(f"  {Fore.GREEN}✓ Load order saved successfully{Style.RESET_ALL}")
-        click.echo(f"\n{Fore.GREEN}═══ Optimization Complete ═══{Style.RESET_ALL}")
+        click.echo(f"\n{Fore.GREEN}=== Optimization Complete ==={Style.RESET_ALL}")
         click.echo(f"\nYour Fallout 4 load order has been optimized!")
         click.echo(f"Launch the game through Mod Organizer 2 to apply changes.")
     else:
@@ -1072,10 +1074,10 @@ def auto_optimize(mo2_path, profile, game, report, backup, apply):
     from mossy_manager.integrations.mo2 import MO2Integration
     from mossy_manager.games.fallout4 import Fallout4Rules
     
-    click.echo(f"{Fore.CYAN}╔═══════════════════════════════════════════════════════════╗{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}║        Mossy Manager - Automatic Optimization            ║{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}║             Complete Workflow for {game.upper()}             ║{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    click.echo(f"{Fore.CYAN}+===========================================================+{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}|        Mossy Manager - Automatic Optimization            |{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}|             Complete Workflow for {game.upper()}             |{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}+===========================================================+{Style.RESET_ALL}\n")
     
     # Initialize MO2
     if mo2_path:
@@ -1096,7 +1098,7 @@ def auto_optimize(mo2_path, profile, game, report, backup, apply):
         return
     
     # PHASE 1: Load Order Optimization
-    click.echo(f"{Fore.CYAN}═══ PHASE 1: Load Order Optimization ═══{Style.RESET_ALL}\n")
+    click.echo(f"{Fore.CYAN}=== PHASE 1: Load Order Optimization ==={Style.RESET_ALL}\n")
     
     current_loadorder = mo2.read_loadorder_txt(profile)
     current_plugins = mo2.read_plugins_txt(profile)
@@ -1122,7 +1124,8 @@ def auto_optimize(mo2_path, profile, game, report, backup, apply):
         click.echo(f"{Fore.YELLOW}Found {len(issues['warnings'])} warnings{Style.RESET_ALL}")
     
     # Optimize
-    optimized = Fallout4Rules.optimize_load_order(current_loadorder)
+    data_path = mo2.get_game_data_path() if hasattr(mo2, 'get_game_data_path') else None
+    optimized = Fallout4Rules.optimize_load_order(current_loadorder, data_path=data_path)
     optimized_plugins = {p: current_plugins.get(p, True) for p in optimized}
     
     if apply:
@@ -1133,7 +1136,7 @@ def auto_optimize(mo2_path, profile, game, report, backup, apply):
         click.echo(f"{Fore.YELLOW}DRY RUN: optimized order calculated; not written. Use --apply to write.{Style.RESET_ALL}\n")
     
     # PHASE 2: Conflict Detection
-    click.echo(f"{Fore.CYAN}═══ PHASE 2: Conflict Detection ═══{Style.RESET_ALL}\n")
+    click.echo(f"{Fore.CYAN}=== PHASE 2: Conflict Detection ==={Style.RESET_ALL}\n")
     
     if mo2.mods_path and mo2.mods_path.exists():
         resolver = ConflictResolver(mo2.mods_path)
@@ -1160,7 +1163,7 @@ def auto_optimize(mo2_path, profile, game, report, backup, apply):
         if analysis.get('by_category'):
             click.echo("  By category:")
             for cat, count in sorted(analysis['by_category'].items(), key=lambda kv: -kv[1]):
-                click.echo(f"    • {cat}: {count}")
+                click.echo(f"    * {cat}: {count}")
         
         click.echo(f"\n{Fore.GREEN}✓ Conflict detection complete{Style.RESET_ALL}\n")
 
@@ -1189,7 +1192,7 @@ def auto_optimize(mo2_path, profile, game, report, backup, apply):
                 click.echo(f"{Fore.RED}✗ Failed to write combined report: {e}{Style.RESET_ALL}")
         
         # PHASE 3: Recommendations
-        click.echo(f"{Fore.CYAN}═══ PHASE 3: Recommendations ═══{Style.RESET_ALL}\n")
+        click.echo(f"{Fore.CYAN}=== PHASE 3: Recommendations ==={Style.RESET_ALL}\n")
         
         recommendations = Fallout4Rules.get_recommendations(optimized)
         if recommendations:
@@ -1207,9 +1210,9 @@ def auto_optimize(mo2_path, profile, game, report, backup, apply):
         click.echo(f"{Fore.YELLOW}⚠ Mods directory not found, skipping conflict detection{Style.RESET_ALL}\n")
     
     # COMPLETE
-    click.echo(f"\n{Fore.GREEN}╔═══════════════════════════════════════════════════════════╗{Style.RESET_ALL}")
-    click.echo(f"{Fore.GREEN}║              AUTOMATIC OPTIMIZATION COMPLETE              ║{Style.RESET_ALL}")
-    click.echo(f"{Fore.GREEN}╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    click.echo(f"\n{Fore.GREEN}+===========================================================+{Style.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}|              AUTOMATIC OPTIMIZATION COMPLETE              |{Style.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}+===========================================================+{Style.RESET_ALL}\n")
     
     click.echo(f"{Fore.CYAN}Your game is ready!{Style.RESET_ALL}")
     click.echo(f"Launch {game.upper()} through Mod Organizer 2 to play with your optimized setup.")
@@ -1237,20 +1240,20 @@ def ui(mo2_path):
 def info():
     """Display information about Mossy Manager"""
     click.echo(f"""
-{Fore.CYAN}╔═══════════════════════════════════════════════════════════╗
-║           MOSSY MANAGER - MO2 Management Tool            ║
-╚═══════════════════════════════════════════════════════════╝{Style.RESET_ALL}
+{Fore.CYAN}===============================================================
+           MOSSY MANAGER - MO2 Management Tool
+==============================================================={Style.RESET_ALL}
 
 {Fore.GREEN}Version:{Style.RESET_ALL} 1.0.0
 {Fore.GREEN}Game:{Style.RESET_ALL} Fallout 4
 {Fore.GREEN}UI:{Style.RESET_ALL} Self-contained desktop window (tkinter)
 
 {Fore.CYAN}Features:{Style.RESET_ALL}
-  • Load Order Management - Organize and optimize Fallout 4 plugin load order
-  • Conflict Resolution - Detect and analyze mod conflicts
-  • Patching System - Create and apply compatibility patches
-  • xEdit Integration - Launch FO4Edit for advanced conflict resolution
-  • Desktop UI - Self-contained MO2-style window (no browser required)
+  * Load Order Management - Organize and optimize Fallout 4 plugin load order
+  * Conflict Resolution - Detect and analyze mod conflicts
+  * Patching System - Create and apply compatibility patches
+  * xEdit Integration - Launch FO4Edit for advanced conflict resolution
+  * Desktop UI - Self-contained MO2-style window (no browser required)
 
 {Fore.CYAN}Commands:{Style.RESET_ALL}
   loadorder      - Manage plugin load order (list, validate, optimize, auto-fo4)
@@ -1317,11 +1320,11 @@ def ai_analyze(plugins_file, mo2_path, profile, output):
     clustering and the built-in Fallout 4 rule engine to produce a
     prioritised, plain-English recommendation list.
     """
-    click.echo(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════╗")
-    click.echo(f"║     Mossy Manager — AI Brain (Machine Learning)  ║")
-    click.echo(f"╚══════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    click.echo(f"\n{Fore.CYAN}+==================================================+")
+    click.echo(f"|     Mossy Manager — AI Brain (Machine Learning)  |")
+    click.echo(f"+==================================================+{Style.RESET_ALL}\n")
 
-    # ── Collect load order ────────────────────────────────────────────
+    # -- Collect load order --------------------------------------------
     load_order = []
     if plugins_file:
         mgr = LoadOrderManager()
@@ -1348,7 +1351,7 @@ def ai_analyze(plugins_file, mo2_path, profile, output):
     brain = ModAIBrain()
     report = brain.full_analysis(load_order)
 
-    # ── Print risk summary ────────────────────────────────────────────
+    # -- Print risk summary --------------------------------------------
     rs = report.get("risk_summary", {})
     click.echo(f"{Fore.CYAN}Risk Summary:{Style.RESET_ALL}")
     colour = {
@@ -1362,17 +1365,17 @@ def ai_analyze(plugins_file, mo2_path, profile, output):
         c = colour.get(level, "")
         click.echo(f"  {c}{level.capitalize():8s}{Style.RESET_ALL} {count}")
 
-    # ── Print anomalies ───────────────────────────────────────────────
+    # -- Print anomalies -----------------------------------------------
     anomalies = report.get("anomalies", {}).get("anomalies", [])
     if anomalies:
         click.echo(f"\n{Fore.YELLOW}Load-Order Anomalies ({len(anomalies)}):{Style.RESET_ALL}")
         for a in anomalies[:5]:
-            click.echo(f"  • [{a['position']:3d}] {a['plugin']}")
+            click.echo(f"  * [{a['position']:3d}] {a['plugin']}")
             click.echo(f"        {Fore.YELLOW}{a['reason']}{Style.RESET_ALL}")
         if len(anomalies) > 5:
             click.echo(f"  … and {len(anomalies) - 5} more")
 
-    # ── Print recommendations ─────────────────────────────────────────
+    # -- Print recommendations -----------------------------------------
     recs = report.get("recommendations", [])
     if recs:
         click.echo(f"\n{Fore.CYAN}AI Recommendations ({len(recs)}):{Style.RESET_ALL}")
@@ -1388,14 +1391,14 @@ def ai_analyze(plugins_file, mo2_path, profile, output):
         if len(recs) > 10:
             click.echo(f"  … and {len(recs) - 10} more (use --output to see all)")
 
-    # ── Cluster summary ───────────────────────────────────────────────
+    # -- Cluster summary -----------------------------------------------
     clusters = report.get("clusters", {}).get("summary", {})
     if clusters:
         click.echo(f"\n{Fore.CYAN}Plugin Clusters:{Style.RESET_ALL}")
         for cid, desc in list(clusters.items())[:6]:
-            click.echo(f"  • {desc}")
+            click.echo(f"  * {desc}")
 
-    # ── Optionally save JSON ──────────────────────────────────────────
+    # -- Optionally save JSON ------------------------------------------
     if output:
         try:
             Path(output).write_text(json.dumps(report, indent=2, default=str))
@@ -1501,9 +1504,9 @@ def ai_reason(plugins_file, problem, output):
       mossy ai reason --problem "game crashes on load"
       mossy ai reason --plugins-file plugins.txt --problem "purple textures"
     """
-    click.echo(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════╗")
-    click.echo(f"║     Mossy Manager — Advanced Reasoner            ║")
-    click.echo(f"╚══════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    click.echo(f"\n{Fore.CYAN}+==================================================+")
+    click.echo(f"|     Mossy Manager — Advanced Reasoner            |")
+    click.echo(f"+==================================================+{Style.RESET_ALL}\n")
 
     load_order = []
     if plugins_file:
@@ -1522,7 +1525,7 @@ def ai_reason(plugins_file, problem, output):
         click.echo(f"{Fore.YELLOW}⚠ Provide --plugins-file and/or --problem.{Style.RESET_ALL}")
         return
 
-    # ── Print steps ───────────────────────────────────────────────────
+    # -- Print steps ---------------------------------------------------
     sev_colour = {
         "critical": Fore.RED,
         "error":    Fore.RED,
@@ -1537,20 +1540,20 @@ def ai_reason(plugins_file, problem, output):
         click.echo(f"    Observed : {s.observation}")
         click.echo(f"    Concluded: {s.deduction}")
 
-    # ── Conclusion ────────────────────────────────────────────────────
+    # -- Conclusion ----------------------------------------------------
     overall_c = sev_colour.get(result.severity, Fore.WHITE)
     click.echo(f"\n{Fore.CYAN}Conclusion:{Style.RESET_ALL}")
     click.echo(f"  {overall_c}{result.conclusion}{Style.RESET_ALL}")
     click.echo(f"  Confidence: {int(result.confidence * 100)}%\n")
 
-    # ── Action plan ───────────────────────────────────────────────────
+    # -- Action plan ---------------------------------------------------
     if result.action_plan:
         click.echo(f"{Fore.CYAN}Action Plan:{Style.RESET_ALL}")
         for i, action in enumerate(result.action_plan, 1):
             click.echo(f"  {i}. {action}")
         click.echo()
 
-    # ── Save JSON ─────────────────────────────────────────────────────
+    # -- Save JSON -----------------------------------------------------
     if output:
         try:
             Path(output).write_text(
@@ -1594,15 +1597,15 @@ def ai_script(plugins_file, problem, patch_name, script_type, plugins, output_di
       mossy ai script --type safe_launch
       mossy ai script --plugins-file plugins.txt --problem "CTD on load" --type auto
     """
-    click.echo(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════╗")
-    click.echo(f"║     Mossy Manager — Script Writer                ║")
-    click.echo(f"╚══════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    click.echo(f"\n{Fore.CYAN}+==================================================+")
+    click.echo(f"|     Mossy Manager — Script Writer                |")
+    click.echo(f"+==================================================+{Style.RESET_ALL}\n")
 
     writer = ScriptWriter(output_dir=Path(output_dir))
     out_dir = Path(output_dir)
     written: list = []
 
-    # ── Auto mode: reason first, then generate ────────────────────────
+    # -- Auto mode: reason first, then generate ------------------------
     if script_type == 'auto':
         load_order: list = []
         if plugins_file:
@@ -1631,7 +1634,7 @@ def ai_script(plugins_file, problem, patch_name, script_type, plugins, output_di
         for path in written:
             click.echo(f"  {Fore.GREEN}✓{Style.RESET_ALL} {path}")
 
-    # ── Explicit xEdit scripts ─────────────────────────────────────────
+    # -- Explicit xEdit scripts -----------------------------------------
     elif script_type == 'conflict_patch':
         content = writer.xedit_conflict_patch(patch_name, list(plugins))
         p = writer.write(f"{patch_name}_conflict_patch.pas", content, out_dir)
@@ -1654,14 +1657,14 @@ def ai_script(plugins_file, problem, patch_name, script_type, plugins, output_di
         p = writer.write(f"{patch_name}_esl_flag.pas", content, out_dir)
         written = [p]
 
-    # ── INI tweaks ────────────────────────────────────────────────────
+    # -- INI tweaks ----------------------------------------------------
     elif script_type in ('papyrus_logging', 'archive_invalidation',
                          'performance_high', 'performance_low'):
         content = writer.ini_tweak(script_type)
         p = writer.write(f"{script_type}.ini", content, out_dir)
         written = [p]
 
-    # ── Batch scripts ─────────────────────────────────────────────────
+    # -- Batch scripts -------------------------------------------------
     elif script_type == 'safe_launch':
         content = writer.batch_safe_launch()
         p = writer.write("safe_launch.bat", content, out_dir)
@@ -1698,21 +1701,21 @@ def ai_fix(plugins_file, loadorder_file, problem, patch_name, output_dir, do_app
     Reason about your load order and generate complete, working fix scripts.
 
     For every issue found the engine writes a ready-to-run script:
-      • Python (.py)    — load-order fixes, applied immediately with --apply
-      • Pascal (.pas)   — xEdit conflict patches with exact record guards
-      • INI fragment    — Fallout4Custom.ini tweaks (Papyrus logging, etc.)
-      • Batch (.bat)    — safe F4SE launch wrapper with plugin-cap check
+      * Python (.py)    — load-order fixes, applied immediately with --apply
+      * Pascal (.pas)   — xEdit conflict patches with exact record guards
+      * INI fragment    — Fallout4Custom.ini tweaks (Papyrus logging, etc.)
+      * Batch (.bat)    — safe F4SE launch wrapper with plugin-cap check
 
     Examples:
       mossy ai fix --plugins-file plugins.txt --apply
       mossy ai fix --plugins-file plugins.txt --problem "CTD on load"
       mossy ai fix --problem "purple textures" --output-dir ./my_fixes
     """
-    click.echo(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════╗")
-    click.echo(f"║   Mossy Manager — Fix Generator                  ║")
-    click.echo(f"╚══════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+    click.echo(f"\n{Fore.CYAN}+==================================================+")
+    click.echo(f"|   Mossy Manager — Fix Generator                  |")
+    click.echo(f"+==================================================+{Style.RESET_ALL}\n")
 
-    # ── Load plugins ──────────────────────────────────────────────────
+    # -- Load plugins --------------------------------------------------
     load_order: list = []
     if plugins_file:
         mgr = LoadOrderManager()
@@ -1724,7 +1727,7 @@ def ai_fix(plugins_file, loadorder_file, problem, patch_name, output_dir, do_app
         click.echo(f"{Fore.YELLOW}⚠ Provide --plugins-file and/or --problem.{Style.RESET_ALL}")
         return
 
-    # ── Reason about the load order / problem ────────────────────────
+    # -- Reason about the load order / problem ------------------------
     reasoner = ModReasoner()
     if problem:
         reasoning = reasoner.diagnose(problem, load_order)
@@ -1740,7 +1743,7 @@ def ai_fix(plugins_file, loadorder_file, problem, patch_name, output_dir, do_app
         c = sev_colour.get(s.severity, Fore.WHITE)
         click.echo(f"  {c}[{s.severity.upper():8s}]{Style.RESET_ALL} {s.rule}: {s.observation[:80]}")
 
-    # ── Generate fixes ────────────────────────────────────────────────
+    # -- Generate fixes ------------------------------------------------
     fg = FixGenerator(patch_name=patch_name)
     fixes = fg.generate_fixes(reasoning, load_order=load_order, loadorder_path=lo_path)
 
@@ -1887,11 +1890,11 @@ def status(mo2_path, profile, output_json, no_ai):
     Uses ModHealthChecker to produce a scored health report (0-100).
     """
     if not output_json:
-        click.echo(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════╗")
-        click.echo(f"║         Mossy Manager — Status Report            ║")
-        click.echo(f"╚══════════════════════════════════════════════════╝{Style.RESET_ALL}\n")
+        click.echo(f"\n{Fore.CYAN}+==================================================+")
+        click.echo(f"|         Mossy Manager — Status Report            |")
+        click.echo(f"+==================================================+{Style.RESET_ALL}\n")
 
-    # ── MO2 detection ─────────────────────────────────────────────────
+    # -- MO2 detection -------------------------------------------------
     if mo2_path:
         mo2 = MO2Integration(Path(mo2_path))
     else:
@@ -1908,11 +1911,11 @@ def status(mo2_path, profile, output_json, no_ai):
     if not output_json:
         click.echo(f"  Profiles: {len(profiles)}")
         for p in profiles[:5]:
-            click.echo(f"    • {p}")
+            click.echo(f"    * {p}")
         if len(profiles) > 5:
             click.echo(f"    … and {len(profiles) - 5} more")
 
-    # ── Load the target profile ───────────────────────────────────────
+    # -- Load the target profile ---------------------------------------
     target_profile = profile or (profiles[0] if profiles else None)
     load_order = []
     if target_profile:
@@ -1925,7 +1928,7 @@ def status(mo2_path, profile, output_json, no_ai):
             click.echo(f"\n{Fore.YELLOW}⚠ No load order found. Specify --mo2-path and --profile.{Style.RESET_ALL}\n")
         return
 
-    # ── Run health checker ────────────────────────────────────────────
+    # -- Run health checker --------------------------------------------
     checker = ModHealthChecker(run_ai=not no_ai)
     report  = checker.check(load_order, profile=target_profile, mo2=mo2)
 
@@ -1933,7 +1936,7 @@ def status(mo2_path, profile, output_json, no_ai):
         click.echo(json.dumps(report.to_dict(), indent=2))
         return
 
-    # ── Render coloured report ────────────────────────────────────────
+    # -- Render coloured report ----------------------------------------
     score_colour = (
         Fore.GREEN  if report.score >= 80 else
         Fore.YELLOW if report.score >= 50 else
@@ -1967,8 +1970,8 @@ def status(mo2_path, profile, output_json, no_ai):
     else:
         click.echo(f"  {Fore.GREEN}✓ No issues found — load order looks healthy!{Style.RESET_ALL}")
 
-    click.echo(f"\n{Fore.CYAN}─ Run 'mossy ai analyze' for a full AI report ─{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}─ Run 'mossy ai fix'     to generate fix scripts ─{Style.RESET_ALL}\n")
+    click.echo(f"\n{Fore.CYAN}- Run 'mossy ai analyze' for a full AI report -{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}- Run 'mossy ai fix'     to generate fix scripts -{Style.RESET_ALL}\n")
 
 
 # ============================================================
@@ -2123,7 +2126,7 @@ def ini_apply(preset, game_docs, filename, no_backup):
         else:
             click.echo(f"  {Fore.YELLOW}Verification warnings:{Style.RESET_ALL}")
             for p in problems[:5]:
-                click.echo(f"    • {p}")
+                click.echo(f"    * {p}")
     except ValueError as exc:
         click.echo(f"{Fore.RED}✗ {exc}{Style.RESET_ALL}")
     except Exception as exc:
@@ -2229,6 +2232,362 @@ def esl_candidates(plugins_file, mo2_path, profile, size_limit):
     click.echo(tabulate(table, headers=["Plugin", "Size", "Note"], tablefmt="simple"))
     click.echo(f"\n{Fore.YELLOW}⚠ Verify each plugin with xEdit before ESL-flagging.{Style.RESET_ALL}")
     click.echo(f"  Use: mossy ai script --type esl_flag --plugins <name.esp>\n")
+
+
+# ============================================================
+# validate  (Mod Validation & Auto-Repair)
+# ============================================================
+
+@main.group()
+def validate():
+    """Validate and repair mod issues (navmesh, masters, precombines, NIFs, BA2)"""
+    pass
+
+
+@validate.command('scan')
+@click.argument('mod-name', required=False)
+@click.option('--all', 'scan_all', is_flag=True,
+              help='Scan all mods in the profile')
+@click.option('--profile', '-p', default=None,
+              help='MO2 profile name (required with --all)')
+@click.option('--mo2-path', '-m', type=click.Path(),
+              help='Path to MO2 installation (auto-detected if omitted)')
+@click.option('--data-path', type=click.Path(),
+              help='Path to Fallout 4 Data directory')
+@click.option('--check', multiple=True,
+              type=click.Choice(['navmesh', 'precombines', 'nifs', 'ba2', 'masters']),
+              help='Specific checks to run (can specify multiple times). Default: all checks')
+@click.option('--json', 'output_json', is_flag=True,
+              help='Output results as JSON')
+def validate_scan(mod_name, scan_all, profile, mo2_path, data_path, check, output_json):
+    """
+    Scan mod(s) for validation issues.
+
+    Detects common Fallout 4 mod issues that cause CTD or broken gameplay:
+      - Deleted navmesh records (CRITICAL - instant CTD)
+      - Missing master file dependencies (mod won't load)
+      - Broken precombined meshes (performance issues)
+      - Missing NIF mesh files (missing textures/models)
+      - Corrupted BA2 archives (missing assets)
+
+    Examples:
+      mossy validate scan "Unofficial Fallout 4 Patch"
+      mossy validate scan --all --profile "Default"
+      mossy validate scan "MyMod" --check navmesh --check masters
+    """
+    from mossy_manager.validators.mod_validator import ModValidator
+    from mossy_manager.integrations.mo2 import MO2Integration
+    import json
+
+    # Auto-detect or use provided MO2 path
+    if mo2_path:
+        mo2_inst = MO2Integration(Path(mo2_path))
+    else:
+        detected = MO2Integration.detect_mo2_installation()
+        if not detected:
+            click.echo(f"{Fore.RED}× Could not detect MO2 installation.{Style.RESET_ALL}")
+            click.echo(f"  Use --mo2-path to specify manually.")
+            return
+        mo2_inst = MO2Integration(detected)
+
+    # Determine which mods to scan
+    mods_to_scan = []
+
+    if scan_all:
+        if not profile:
+            click.echo(f"{Fore.RED}× --profile required when using --all{Style.RESET_ALL}")
+            return
+
+        # Get all enabled mods from profile
+        modlist = mo2_inst.read_modlist_txt(profile)
+        mods_to_scan = [name for name, enabled in modlist.items() if enabled]
+
+        if not mods_to_scan:
+            click.echo(f"{Fore.YELLOW}⚠ No enabled mods in profile '{profile}'{Style.RESET_ALL}")
+            return
+
+        click.echo(f"{Fore.CYAN}Scanning {len(mods_to_scan)} mod(s) from profile '{profile}'...{Style.RESET_ALL}\n")
+
+    elif mod_name:
+        mods_to_scan = [mod_name]
+    else:
+        click.echo(f"{Fore.RED}× Specify a mod name or use --all{Style.RESET_ALL}")
+        click.echo(f"  Example: mossy validate scan \"Mod Name\"")
+        return
+
+    # Determine checks to run
+    checks_to_run = list(check) if check else ['navmesh', 'masters', 'precombines', 'nifs', 'ba2']
+
+    # Initialize validator
+    validator = ModValidator()
+
+    # Scan each mod
+    all_results = {}
+
+    for mod in mods_to_scan:
+        mod_path = mo2_inst.mods_path / mod
+
+        if not mod_path.exists():
+            click.echo(f"{Fore.RED}× Mod not found: {mod}{Style.RESET_ALL}")
+            continue
+
+        click.echo(f"{Fore.CYAN}Scanning: {mod}{Style.RESET_ALL}")
+
+        try:
+            result = validator.validate_mod(
+                mod_path,
+                checks=checks_to_run,
+                data_path=Path(data_path) if data_path else None
+            )
+
+            all_results[mod] = result
+
+            # Display results
+            if not result.has_issues:
+                click.echo(f"  {Fore.GREEN}✓ No issues found{Style.RESET_ALL}")
+            else:
+                click.echo(f"  {Fore.YELLOW}Found {len(result.issues)} issue(s):{Style.RESET_ALL}")
+
+                for issue in result.issues:
+                    # Color by severity
+                    color = {
+                        'critical': Fore.RED,
+                        'error': Fore.YELLOW,
+                        'warning': Fore.BLUE,
+                        'info': Fore.CYAN
+                    }.get(issue.severity, Fore.WHITE)
+
+                    fix_indicator = f" {Fore.GREEN}[FIX AVAILABLE]{Style.RESET_ALL}" if issue.fix_available else ""
+                    plugin_indicator = f" ({issue.plugin_name})" if issue.plugin_name else ""
+
+                    click.echo(f"    {color}{issue.severity.upper()}: {issue.message}{Style.RESET_ALL}{plugin_indicator}{fix_indicator}")
+
+                # Statistics
+                if result.critical_count > 0:
+                    click.echo(f"  {Fore.RED}CRITICAL: {result.critical_count} issue(s) cause CTD{Style.RESET_ALL}")
+                if result.fixable_count > 0:
+                    click.echo(f"  {Fore.GREEN}Fixable: {result.fixable_count} issue(s) can be auto-repaired{Style.RESET_ALL}")
+
+        except Exception as e:
+            click.echo(f"  {Fore.RED}× Validation failed: {e}{Style.RESET_ALL}")
+            all_results[mod] = {'error': str(e)}
+
+        click.echo()  # Blank line between mods
+
+    # JSON output
+    if output_json:
+        json_output = {}
+        for mod, result in all_results.items():
+            if hasattr(result, 'to_dict'):
+                json_output[mod] = result.to_dict()
+            else:
+                json_output[mod] = result  # Error dict
+
+        print(json.dumps(json_output, indent=2, default=str))
+
+
+@validate.command('fix')
+@click.argument('mod-name')
+@click.option('--profile', '-p', default=None,
+              help='MO2 profile name')
+@click.option('--mo2-path', '-m', type=click.Path(),
+              help='Path to MO2 installation')
+@click.option('--fo4edit', type=click.Path(),
+              help='Path to FO4Edit.exe (auto-detected if omitted)')
+@click.option('--data-path', type=click.Path(),
+              help='Path to Fallout 4 Data directory')
+@click.option('--fix', multiple=True,
+              type=click.Choice(['navmesh', 'precombines', 'nifs', 'ba2']),
+              help='Specific fixes to apply (can specify multiple). Default: all fixable issues')
+@click.option('--yes', '-y', is_flag=True,
+              help='Skip confirmation prompts (DANGEROUS - use with caution!)')
+@click.option('--dry-run', is_flag=True,
+              help='Show what would be fixed without actually fixing')
+def validate_fix(mod_name, profile, mo2_path, fo4edit, data_path, fix, yes, dry_run):
+    """
+    Auto-fix validation issues in a mod.
+
+    IMPORTANT: Creates automatic backups before ALL modifications!
+    If something goes wrong, use: mossy validate rollback --backup-id <id>
+
+    Supported fixes:
+      - navmesh: Undelete and disable navmesh (fixes CTD)
+      - masters: Provides manual fix steps (cannot auto-fix)
+      - precombines: Regenerate precombined meshes (coming soon)
+      - nifs: Download missing NIFs from Nexus (coming soon)
+      - ba2: Repair corrupted archives (coming soon)
+
+    Examples:
+      mossy validate fix "MyMod" --fix navmesh
+      mossy validate fix "MyMod" --dry-run
+      mossy validate fix "MyMod" --fix navmesh --yes  (skip confirmations)
+    """
+    from mossy_manager.validators.mod_validator import ModValidator
+    from mossy_manager.fixers.auto_fixer import AutoFixer
+    from mossy_manager.integrations.mo2 import MO2Integration
+
+    if dry_run:
+        click.echo(f"{Fore.CYAN}[DRY RUN MODE] Showing what would be fixed{Style.RESET_ALL}\n")
+
+    # Auto-detect MO2
+    if mo2_path:
+        mo2_inst = MO2Integration(Path(mo2_path))
+    else:
+        detected = MO2Integration.detect_mo2_installation()
+        if not detected:
+            click.echo(f"{Fore.RED}× Could not detect MO2 installation.{Style.RESET_ALL}")
+            return
+        mo2_inst = MO2Integration(detected)
+
+    mod_path = mo2_inst.mods_path / mod_name
+
+    if not mod_path.exists():
+        click.echo(f"{Fore.RED}× Mod not found: {mod_name}{Style.RESET_ALL}")
+        return
+
+    click.echo(f"{Fore.CYAN}Validating: {mod_name}{Style.RESET_ALL}")
+
+    # Step 1: Scan for issues
+    validator = ModValidator()
+
+    try:
+        result = validator.validate_mod(
+            mod_path,
+            checks=list(fix) if fix else None,
+            data_path=Path(data_path) if data_path else None
+        )
+
+        if not result.has_issues:
+            click.echo(f"{Fore.GREEN}✓ No issues found - mod is clean!{Style.RESET_ALL}")
+            return
+
+        click.echo(f"{Fore.YELLOW}Found {len(result.issues)} issue(s){Style.RESET_ALL}\n")
+
+        # Filter to fixable issues
+        fixable = [issue for issue in result.issues if issue.fix_available]
+
+        if not fixable:
+            click.echo(f"{Fore.YELLOW}No fixable issues. Manual intervention required:{Style.RESET_ALL}")
+            for issue in result.issues:
+                click.echo(f"  - {issue.message}")
+            return
+
+        click.echo(f"{Fore.GREEN}{len(fixable)} issue(s) can be auto-fixed{Style.RESET_ALL}\n")
+
+        # Step 2: Apply fixes
+        fixer = AutoFixer(dry_run=dry_run, skip_confirmations=yes)
+
+        fix_results = fixer.fix_mod(
+            mod_path,
+            fixable,
+            xedit_path=Path(fo4edit) if fo4edit else None,
+            data_path=Path(data_path) if data_path else None
+        )
+
+        # Step 3: Display results
+        click.echo(f"\n{Fore.CYAN}{'='*60}{Style.RESET_ALL}")
+        click.echo(f"{Fore.CYAN}Fix Results{Style.RESET_ALL}")
+        click.echo(f"{Fore.CYAN}{'='*60}{Style.RESET_ALL}\n")
+
+        for category, result in fix_results.items():
+            if result.get('success'):
+                if result.get('dry_run'):
+                    click.echo(f"{Fore.CYAN}[DRY RUN] {category}: Would fix {result.get('issues_count', 0)} issues{Style.RESET_ALL}")
+                else:
+                    click.echo(f"{Fore.GREEN}✓ {category}: Fixed successfully{Style.RESET_ALL}")
+                    if 'records_fixed' in result:
+                        click.echo(f"    Fixed {result['records_fixed']} record(s)")
+            elif result.get('skipped'):
+                click.echo(f"{Fore.YELLOW}⊘ {category}: Skipped (user declined){Style.RESET_ALL}")
+            else:
+                click.echo(f"{Fore.RED}× {category}: FAILED{Style.RESET_ALL}")
+                click.echo(f"    {result.get('message', 'Unknown error')}")
+
+        # Show backup locations
+        click.echo(f"\n{Fore.CYAN}Backups:{Style.RESET_ALL}")
+        for category, result in fix_results.items():
+            if 'plugin_results' in result:
+                for plugin, plugin_result in result['plugin_results'].items():
+                    if plugin_result.get('backup_path'):
+                        click.echo(f"  {plugin}: {plugin_result['backup_path']}")
+
+        if not dry_run:
+            click.echo(f"\n{Fore.GREEN}To rollback if needed:{Style.RESET_ALL}")
+            click.echo(f"  mossy validate rollback --backup-id <timestamp>")
+
+    except Exception as e:
+        click.echo(f"{Fore.RED}× Fix failed: {e}{Style.RESET_ALL}")
+        import traceback
+        traceback.print_exc()
+
+
+@validate.command('rollback')
+@click.option('--backup-id', required=True,
+              help='Backup ID or timestamp to restore')
+@click.option('--list', 'list_backups', is_flag=True,
+              help='List available backups instead of rolling back')
+def validate_rollback(backup_id, list_backups):
+    """
+    Rollback to a previous backup.
+
+    Use this if mod fixes caused problems. Restores the original
+    mod files from before any modifications were made.
+
+    Examples:
+      mossy validate rollback --list
+      mossy validate rollback --backup-id 20260307_190433
+    """
+    from mossy_manager.utils.backup_manager import BackupManager
+
+    backup_root = Path.home() / ".mossy_manager" / "backups"
+    backup_mgr = BackupManager(backup_root)
+
+    if list_backups:
+        backups = backup_mgr.list_backups()
+
+        if not backups:
+            click.echo(f"{Fore.YELLOW}No backups found{Style.RESET_ALL}")
+            return
+
+        click.echo(f"\n{Fore.CYAN}Available Backups:{Style.RESET_ALL}\n")
+
+        from tabulate import tabulate
+        table = []
+        for backup in backups:
+            created = backup.created_at
+            size_mb = backup.size_bytes / (1024 * 1024)
+            table.append([
+                backup._meta.get('timestamp', 'unknown'),
+                backup.label,
+                backup.source_profile,
+                f"{size_mb:.1f} MB",
+                created
+            ])
+
+        click.echo(tabulate(table, headers=["Backup ID", "Label", "Profile", "Size", "Created"], tablefmt="simple"))
+        click.echo(f"\n{Fore.CYAN}To restore a backup:{Style.RESET_ALL}")
+        click.echo(f"  mossy validate rollback --backup-id <Backup ID>\n")
+        return
+
+    # Restore backup
+    try:
+        click.echo(f"{Fore.CYAN}Restoring backup: {backup_id}{Style.RESET_ALL}")
+
+        success = backup_mgr.restore_backup_by_id(backup_id)
+
+        if success:
+            click.echo(f"{Fore.GREEN}✓ Backup restored successfully!{Style.RESET_ALL}")
+            click.echo(f"\n{Fore.CYAN}Your mod has been rolled back to its state before fixes were applied.{Style.RESET_ALL}")
+        else:
+            click.echo(f"{Fore.RED}× Rollback failed{Style.RESET_ALL}")
+
+    except FileNotFoundError as e:
+        click.echo(f"{Fore.RED}× {e}{Style.RESET_ALL}")
+        click.echo(f"\n{Fore.CYAN}Use --list to see available backups{Style.RESET_ALL}")
+    except ValueError as e:
+        click.echo(f"{Fore.RED}× {e}{Style.RESET_ALL}")
+    except Exception as e:
+        click.echo(f"{Fore.RED}× Rollback failed: {e}{Style.RESET_ALL}")
 
 
 if __name__ == '__main__':

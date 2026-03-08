@@ -219,6 +219,61 @@ class BackupManager:
         logger.info(f"Restored {backup_path} → {target_path}")
         return True
 
+    def restore_backup_by_id(self, backup_id: str) -> bool:
+        """
+        Restore a backup by its ID (timestamp or directory name).
+
+        This is a convenience method for CLI usage where users can specify
+        a backup by its short ID instead of full path.
+
+        Parameters
+        ----------
+        backup_id : str
+            Backup identifier (timestamp or partial directory name match).
+
+        Returns
+        -------
+        bool
+            ``True`` on success.
+
+        Raises
+        ------
+        FileNotFoundError
+            If no matching backup is found.
+        ValueError
+            If multiple backups match the ID.
+        """
+        # Find backup matching the ID
+        matches = []
+        for entry in self.list_backups():
+            # Match by timestamp or directory name
+            if backup_id in entry.path.name or backup_id == entry._meta.get("timestamp", ""):
+                matches.append(entry)
+
+        if not matches:
+            raise FileNotFoundError(f"No backup found matching ID: {backup_id}")
+
+        if len(matches) > 1:
+            raise ValueError(
+                f"Multiple backups match ID '{backup_id}'. "
+                f"Be more specific or use full path."
+            )
+
+        backup_entry = matches[0]
+
+        # Get the original source path from metadata
+        source_path_str = backup_entry._meta.get("source_path")
+        if not source_path_str:
+            raise ValueError(
+                f"Backup {backup_entry.path.name} missing source_path metadata. "
+                f"Cannot determine restore location."
+            )
+
+        target_path = Path(source_path_str)
+
+        # Restore the backup
+        return self.restore_backup(backup_entry.path, target_path, overwrite=True)
+
     # ------------------------------------------------------------------ #
     #  Cleanup                                                             #
     # ------------------------------------------------------------------ #

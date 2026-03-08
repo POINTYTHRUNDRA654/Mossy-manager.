@@ -253,48 +253,72 @@ class Fallout4Rules:
         return conflicts
     
     @classmethod
-    def optimize_load_order(cls, plugins: List[str]) -> List[str]:
+    def optimize_load_order(cls, plugins: List[str], data_path: Optional[Path] = None) -> List[str]:
         """
-        Optimize load order for Fallout 4 based on advanced rules
-        
+        Optimize load order for Fallout 4 using dependency-aware algorithm
+
+        This method:
+        1. Reads master file dependencies from each plugin
+        2. Builds a dependency graph
+        3. Performs topological sort to respect all dependencies
+        4. Groups by semantic type (framework, content, patch, etc.)
+        5. Ensures ESM/ESL/ESP separation
+
+        This is similar to how LOOT works, respecting actual plugin relationships.
+
         Args:
             plugins: List of plugin names
-            
+            data_path: Path to Fallout 4 Data directory (optional, for reading plugin files)
+
         Returns:
-            Optimized list of plugin names
+            Optimized list of plugin names in correct load order
         """
-        logger.info(f"Optimizing load order for {len(plugins)} Fallout 4 plugins")
-        
-        # Separate masters and regular plugins
-        masters = []
-        regulars = []
-        
+        logger.info(f"Optimizing Fallout 4 load order for {len(plugins)} plugins")
+
+        # Try to read master dependencies from actual plugin files
+        plugin_masters = {}
+
+        if data_path and data_path.exists():
+            try:
+                from mossy_manager.external.plugin_parser import PluginParser
+                parser = PluginParser()
+
+                for plugin in plugins:
+                    plugin_path = data_path / plugin
+                    if plugin_path.exists():
+                        try:
+                            info = parser.parse_plugin(plugin_path)
+                            plugin_masters[plugin] = info.masters
+                            logger.debug(f"{plugin} requires: {info.masters}")
+                        except Exception as e:
+                            logger.warning(f"Could not parse {plugin}: {e}")
+                            plugin_masters[plugin] = []
+                    else:
+                        plugin_masters[plugin] = []
+
+            except ImportError:
+                logger.warning("PluginParser not available, using fallback logic")
+
+        # If we couldn't read master files, use empty dependencies
+        # (will still sort by file type and semantic analysis)
         for plugin in plugins:
-            if plugin in cls.MASTER_FILES:
-                masters.append(plugin)
-            else:
-                regulars.append(plugin)
-        
-        # Sort masters by official order
-        masters.sort(key=lambda x: cls.get_master_file_priority(x))
-        
-        # Categorize and sort regular plugins
-        categorized = []
-        for plugin in regulars:
-            category, priority = cls.categorize_plugin(plugin)
-            categorized.append((priority, plugin, category))
-        
-        # Sort by priority, then alphabetically within same priority
-        categorized.sort(key=lambda x: (x[0], x[1].lower()))
-        
-        # Extract sorted plugins
-        sorted_regulars = [item[1] for item in categorized]
-        
-        # Combine: masters first, then regular plugins
-        optimized = masters + sorted_regulars
-        
-        logger.info(f"Optimized load order: {len(masters)} masters, {len(regulars)} regular plugins")
-        
+            if plugin not in plugin_masters:
+                plugin_masters[plugin] = []
+
+        # Use the dependency-aware optimizer with current order for tie-breaking
+        from mossy_manager.core.load_order_optimizer import LoadOrderOptimizer
+
+        optimizer = LoadOrderOptimizer(data_path, current_order=plugins)
+        optimized = optimizer.optimize(plugins, plugin_masters)
+
+        logger.info(
+            f"Optimized load order: "
+            f"{sum(1 for p in optimized if p in cls.MASTER_FILES)} official masters, "
+            f"{sum(1 for p in optimized if p.lower().endswith('.esm') and p not in cls.MASTER_FILES)} unofficial ESMs, "
+            f"{sum(1 for p in optimized if p.lower().endswith('.esl'))} ESLs, "
+            f"{sum(1 for p in optimized if p.lower().endswith('.esp'))} ESPs"
+        )
+
         return optimized
     
     @classmethod

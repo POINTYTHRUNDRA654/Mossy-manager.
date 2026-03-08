@@ -203,7 +203,7 @@ def test_webhook_optimize(tmp_path, monkeypatch):
 def test_ui_persistence_code_present():
     # ensure index.html contains localStorage logic for state
     idx = Path(__file__).parent.parent / "src" / "mossy_manager" / "webui" / "static" / "index.html"
-    text = idx.read_text()
+    text = idx.read_text(encoding='utf-8')
     assert "localStorage.setItem" in text
     assert "localStorage.getItem" in text
 

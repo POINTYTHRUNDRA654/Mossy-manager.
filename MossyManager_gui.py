@@ -57,6 +57,16 @@ _src  = os.path.join(_here, "src")
 if os.path.isdir(_src) and _src not in sys.path:
     sys.path.insert(0, _src)
 
+# ---------------------------------------------------------------------------
+# Auto-update: Check for and apply pending updates before launching GUI
+# ---------------------------------------------------------------------------
+try:
+    from mossy_manager.utils.update_manager import check_and_apply_pending_update
+    check_and_apply_pending_update()
+except Exception as e:
+    # Don't block startup if update check fails
+    print(f"Update check failed: {e}")
+
 from mossy_manager.gui.app import launch
 
 if __name__ == "__main__":

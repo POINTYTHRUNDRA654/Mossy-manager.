@@ -282,7 +282,7 @@ class TestCLIUiCommand:
     def test_uvicorn_not_imported_by_cli(self):
         """The CLI must NOT import uvicorn in any form."""
         import ast
-        cli_src = (REPO_ROOT / "src" / "mossy_manager" / "cli" / "main.py").read_text()
+        cli_src = (REPO_ROOT / "src" / "mossy_manager" / "cli" / "main.py").read_text(encoding='utf-8')
         tree = ast.parse(cli_src)
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -298,7 +298,7 @@ class TestCLIUiCommand:
     def test_webbrowser_not_imported_by_cli(self):
         """The CLI must NOT import webbrowser in any form."""
         import ast
-        cli_src = (REPO_ROOT / "src" / "mossy_manager" / "cli" / "main.py").read_text()
+        cli_src = (REPO_ROOT / "src" / "mossy_manager" / "cli" / "main.py").read_text(encoding='utf-8')
         tree = ast.parse(cli_src)
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -424,7 +424,7 @@ class TestGuiEntryPoint:
         they require surrogate pairs in UTF-16.  All toolbar icons must stay in the
         Basic Multilingual Plane.
         """
-        gui_src = (REPO_ROOT / "src" / "mossy_manager" / "gui" / "app.py").read_text()
+        gui_src = (REPO_ROOT / "src" / "mossy_manager" / "gui" / "app.py").read_text(encoding='utf-8')
         for i, ch in enumerate(gui_src):
             if ord(ch) > 0xFFFF:
                 context = gui_src[max(0, i - 20):i + 20]

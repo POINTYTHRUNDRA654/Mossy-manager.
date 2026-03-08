@@ -40,24 +40,103 @@ class MO2Integration:
         Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Mod Organizer 2',
     ]
     
-    def __init__(self, mo2_path: Optional[Path] = None):
+    def __init__(self, mo2_path: Optional[Path] = None, game_name: str = 'Fallout 4'):
         """
         Initialize MO2 integration
-        
+
         Args:
             mo2_path: Path to MO2 installation directory
+            game_name: Name of the game (e.g., 'Fallout 4', 'Skyrim Special Edition')
         """
         self.mo2_path = mo2_path
+        self.game_name = game_name
         self.profiles_path: Optional[Path] = None
         self.mods_path: Optional[Path] = None
+        self.overwrite_path: Optional[Path] = None
+        self.download_path: Optional[Path] = None
+        self.game_path: Optional[Path] = None
         self.current_profile: Optional[str] = None
-        
+
         if mo2_path and mo2_path.exists():
             self._init_paths()
-    
+
     def _init_paths(self):
-        """Initialize MO2 directory paths"""
-        if self.mo2_path:
+        """Initialize MO2 directory paths by reading ModOrganizer.ini from AppData (like LOOT does)"""
+        if not self.mo2_path:
+            return
+
+        # MO2 stores per-game configuration in %LOCALAPPDATA%\ModOrganizer\<GameName>\ModOrganizer.ini
+        # This is how LOOT and other tools find MO2 settings
+        appdata_mo2 = Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData' / 'Local')) / 'ModOrganizer' / self.game_name
+        ini_file = appdata_mo2 / 'ModOrganizer.ini'
+
+        if not ini_file.exists():
+            # Fall back to checking in MO2 installation directory (portable mode)
+            ini_file = self.mo2_path / 'ModOrganizer.ini'
+
+        if ini_file.exists():
+            config = configparser.ConfigParser()
+            try:
+                # MO2 uses UTF-8 with BOM, configparser handles this
+                config.read(ini_file, encoding='utf-8')
+                logger.info(f"Reading MO2 configuration from: {ini_file}")
+
+                # Extract paths from [Settings] section
+                if 'Settings' in config:
+                    settings = config['Settings']
+
+                    # Profiles directory (where profiles/ folder is)
+                    if 'profiles_directory' in settings:
+                        self.profiles_path = Path(settings['profiles_directory'])
+                        logger.info(f"Found profiles_directory: {self.profiles_path}")
+
+                    # Mods directory (where mods/ folder is)
+                    if 'mod_directory' in settings:
+                        self.mods_path = Path(settings['mod_directory'])
+                        logger.info(f"Found mod_directory: {self.mods_path}")
+
+                    # Overwrite directory
+                    if 'overwrite_directory' in settings:
+                        self.overwrite_path = Path(settings['overwrite_directory'])
+                        logger.info(f"Found overwrite_directory: {self.overwrite_path}")
+
+                    # Download directory
+                    if 'download_directory' in settings:
+                        self.download_path = Path(settings['download_directory'])
+
+                # Extract game path from [General] section
+                if 'General' in config:
+                    general = config['General']
+                    if 'gamePath' in general:
+                        # MO2 stores paths as @ByteArray(...) format, extract the actual path
+                        game_path_raw = general['gamePath']
+                        if game_path_raw.startswith('@ByteArray('):
+                            # Remove @ByteArray( and trailing )
+                            game_path_str = game_path_raw[11:-1]
+                            # Replace \\  with \
+                            game_path_str = game_path_str.replace('\\\\', '\\')
+                            self.game_path = Path(game_path_str)
+                            logger.info(f"Found gamePath: {self.game_path}")
+                        else:
+                            self.game_path = Path(game_path_raw)
+
+                # If paths weren't found in INI, fall back to defaults
+                if not self.profiles_path:
+                    logger.warning("profiles_directory not found in INI, using default")
+                    self.profiles_path = self.mo2_path / 'profiles'
+
+                if not self.mods_path:
+                    logger.warning("mod_directory not found in INI, using default")
+                    self.mods_path = self.mo2_path / 'mods'
+
+            except Exception as e:
+                logger.error(f"Could not parse ModOrganizer.ini: {e}", exc_info=True)
+                # Fall back to portable mode defaults
+                self.profiles_path = self.mo2_path / 'profiles'
+                self.mods_path = self.mo2_path / 'mods'
+        else:
+            # No INI file found, use portable mode defaults
+            logger.warning(f"No ModOrganizer.ini found at {ini_file}, using portable defaults")
             self.profiles_path = self.mo2_path / 'profiles'
             self.mods_path = self.mo2_path / 'mods'
     
@@ -174,7 +253,23 @@ class MO2Integration:
             return profile_path
         
         return None
-    
+
+    def get_game_data_path(self) -> Optional[Path]:
+        """
+        Get path to game's Data directory (where plugins are located)
+
+        Returns:
+            Path to Data directory (e.g., G:/Steam/steamapps/common/Fallout 4/Data)
+        """
+        if self.game_path and self.game_path.exists():
+            data_path = self.game_path / 'Data'
+            if data_path.exists():
+                return data_path
+            logger.warning(f"Data directory not found in game path: {self.game_path}")
+        else:
+            logger.warning("Game path not set or doesn't exist")
+        return None
+
     def read_plugins_txt(self, profile_name: str) -> Dict[str, bool]:
         """
         Read plugins.txt from MO2 profile

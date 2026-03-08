@@ -20,24 +20,24 @@ def main():
     # Check if PyInstaller is installed
     try:
         import PyInstaller
-        print(f"✓ PyInstaller found: {PyInstaller.__version__}")
+        print(f"[OK] PyInstaller found: {PyInstaller.__version__}")
     except ImportError:
-        print("✗ PyInstaller not found")
+        print("[FAIL] PyInstaller not found")
         print("Installing PyInstaller...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
-        print("✓ PyInstaller installed")
-    
+        print("[OK] PyInstaller installed")
+
     print()
-    
+
     # Check if spec file exists
     spec_file = Path("MossyManager.spec")
     if not spec_file.exists():
-        print(f"✗ Spec file not found: {spec_file}")
+        print(f"[FAIL] Spec file not found: {spec_file}")
         return 1
-    
-    print(f"✓ Spec file found: {spec_file}")
+
+    print(f"[OK] Spec file found: {spec_file}")
     print()
-    
+
     # Clean previous build
     print("Cleaning previous build...")
     for dir_name in ['build', 'dist']:
@@ -45,7 +45,7 @@ def main():
         if dir_path.exists():
             shutil.rmtree(dir_path)
             print(f"  Removed: {dir_name}/")
-    print("✓ Clean complete")
+    print("[OK] Clean complete")
     print()
     
     # Run PyInstaller
@@ -68,9 +68,9 @@ def main():
     print()
     
     if result.returncode == 0:
-        print("✓ Build successful!")
+        print("[OK] Build successful!")
         print()
-        
+
         # Check if executable was created (name differs by platform)
         exe_name = "MossyManager.exe" if sys.platform == "win32" else "MossyManager"
         exe_path = Path("dist") / exe_name
@@ -104,10 +104,10 @@ def main():
             print("Copy the entire folder into your MO2 'tools' directory, then add\n" \
                   "the executable via MO2's UI (or use the generated ini file).")
         else:
-            print("⚠ Warning: Executable not found at expected location")
+            print("[WARN] Warning: Executable not found at expected location")
             return 1
     else:
-        print("✗ Build failed")
+        print("[FAIL] Build failed")
         return 1
     
     return 0
