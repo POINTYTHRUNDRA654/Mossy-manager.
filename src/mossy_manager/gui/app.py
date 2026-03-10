@@ -12,11 +12,14 @@ DO NOT convert this module to a web-based UI.
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Guard: fail gracefully when running headless (e.g. CI without a display)
@@ -273,6 +276,9 @@ class DesktopApp:
     def _build_ui(self) -> None:
         root = self._root
 
+        # Menu bar
+        self._build_menu_bar(root)
+
         # Title bar
         self._build_title_bar(root)
 
@@ -287,6 +293,158 @@ class DesktopApp:
 
         # Status bar
         self._build_status_bar(root)
+
+    def _build_menu_bar(self, parent: tk.Widget) -> None:
+        """Build the menu bar with Help and Updates menus."""
+        menubar = tk.Menu(parent, bg=PALETTE["bg_header"], fg=PALETTE["text"],
+                          activebackground=PALETTE["bg_row_hover"],
+                          activeforeground=PALETTE["text_head"],
+                          tearoff=False)
+        parent.config(menu=menubar)
+
+        # Help menu
+        help_menu = tk.Menu(menubar, bg=PALETTE["bg_panel"], fg=PALETTE["text"],
+                            activebackground=PALETTE["bg_row_hover"],
+                            activeforeground=PALETTE["text_head"],
+                            tearoff=False)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="About", command=self._show_about)
+
+        # Updates menu
+        updates_menu = tk.Menu(menubar, bg=PALETTE["bg_panel"], fg=PALETTE["text"],
+                               activebackground=PALETTE["bg_row_hover"],
+                               activeforeground=PALETTE["text_head"],
+                               tearoff=False)
+        menubar.add_cascade(label="Updates", menu=updates_menu)
+        updates_menu.add_command(label="Check for Updates", command=self._check_for_updates)
+
+    def _show_about(self) -> None:
+        """Show the about dialog."""
+        messagebox.showinfo(
+            "About Mossy Manager",
+            "Mossy Manager v1.0.0\n\n"
+            "A load order optimizer and conflict resolver for Mod Organizer 2.\n\n"
+            "GitHub: https://github.com/POINTYTHRUNDRA654/Mossy-manager"
+        )
+
+    def _check_for_updates(self) -> None:
+        """Check for updates and show a dialog with the result."""
+        from mossy_manager.utils.update_manager import UpdateManager
+        import threading
+
+        # Show a checking dialog
+        dialog = tk.Toplevel(self._root)
+        dialog.title("Checking for Updates")
+        dialog.geometry("400x120")
+        dialog.configure(background=PALETTE["bg_panel"])
+        dialog.resizable(False, False)
+        dialog.transient(self._root)
+        dialog.grab_set()
+
+        tk.Label(dialog, text="Checking for updates…",
+                 bg=PALETTE["bg_panel"], fg=PALETTE["text"],
+                 font=_FONT_UI).pack(pady=20)
+
+        progress = ttk.Progressbar(dialog, length=350, mode='indeterminate')
+        progress.pack(pady=10)
+        progress.start()
+
+        def check_in_background():
+            try:
+                updater = UpdateManager()
+                update_info = updater.check_for_updates(force=True)
+
+                self._root.after(0, lambda: self._show_update_result(dialog, update_info, updater))
+            except Exception as e:
+                self._root.after(0, lambda: self._show_update_error(dialog, str(e)))
+
+        thread = threading.Thread(target=check_in_background, daemon=True)
+        thread.start()
+
+    def _show_update_result(self, dialog: tk.Widget, update_info: Optional[Dict[str, Any]], updater: Any) -> None:
+        """Show update availability dialog."""
+        dialog.destroy()
+
+        if update_info is None:
+            messagebox.showinfo(
+                "Mossy Manager",
+                "You are already running the latest version."
+            )
+            return
+
+        # Show update available dialog
+        result = messagebox.askyesnocancel(
+            "Update Available",
+            f"A new version is available: {update_info['version']}\n\n"
+            f"Release Notes:\n{update_info.get('release_notes', 'No notes')}\n\n"
+            f"Download and install now?"
+        )
+
+        if result is True:
+            # Download the update
+            self._download_update(update_info, updater)
+        elif result is False:
+            # Don't update
+            pass
+
+    def _show_update_error(self, dialog: tk.Widget, error: str) -> None:
+        """Show update check error dialog."""
+        dialog.destroy()
+        messagebox.showerror(
+            "Update Check Failed",
+            f"Failed to check for updates:\n\n{error}"
+        )
+
+    def _download_update(self, update_info: Dict[str, Any], updater: Any) -> None:
+        """Download and apply the update."""
+        import threading
+
+        # Show download dialog
+        dialog = tk.Toplevel(self._root)
+        dialog.title("Downloading Update")
+        dialog.geometry("450x150")
+        dialog.configure(background=PALETTE["bg_panel"])
+        dialog.resizable(False, False)
+        dialog.transient(self._root)
+        dialog.grab_set()
+
+        size_mb = update_info.get('size_mb', 0)
+        label = tk.Label(dialog, text=f"Downloading {size_mb:.1f} MB...",
+                         bg=PALETTE["bg_panel"], fg=PALETTE["text"],
+                         font=_FONT_UI)
+        label.pack(pady=15)
+
+        progress = ttk.Progressbar(dialog, length=400, mode='indeterminate')
+        progress.pack(pady=10)
+        progress.start()
+
+        def download_in_background():
+            try:
+                success = updater.download_update(update_info)
+                if success:
+                    self._root.after(0, lambda: self._update_downloaded(dialog, updater))
+                else:
+                    self._root.after(0, lambda: self._show_update_error(dialog, "Download failed"))
+            except Exception as e:
+                self._root.after(0, lambda: self._show_update_error(dialog, str(e)))
+
+        thread = threading.Thread(target=download_in_background, daemon=True)
+        thread.start()
+
+    def _update_downloaded(self, dialog: tk.Widget, updater: Any) -> None:
+        """Show that update is ready to install."""
+        dialog.destroy()
+
+        result = messagebox.askyesno(
+            "Update Ready",
+            "Update downloaded successfully.\n\n"
+            "Mossy Manager will close and the update will be applied.\n"
+            "Click Yes to restart now, or No to restart later."
+        )
+
+        if result:
+            # Apply update immediately
+            updater.apply_update()
 
     def _build_title_bar(self, parent: tk.Widget) -> None:
         bar = tk.Frame(parent, background=PALETTE["bg_header"], height=30)
@@ -863,8 +1021,25 @@ class DesktopApp:
 
     def _run_optimize(self) -> None:
         profile = self._sv_profile.get()
-        if not profile or not self._mo2:
-            messagebox.showwarning("No profile", "Select an MO2 profile first.")
+
+        # Clear detailed error messages
+        if not self._mo2:
+            self._set_status("ERROR: MO2 not detected!", PALETTE["danger"])
+            messagebox.showerror(
+                "MO2 Not Detected",
+                "Mod Organizer 2 could not be found.\n\n"
+                "Please either:\n"
+                "1. Install Mod Organizer 2\n"
+                "2. Click the folder icon (📁) to browse to your MO2 installation"
+            )
+            return
+
+        if not profile:
+            self._set_status("ERROR: No profile selected!", PALETTE["danger"])
+            messagebox.showwarning(
+                "No Profile Selected",
+                "Please select a profile from the dropdown in the toolbar first."
+            )
             return
 
         def _do():
@@ -891,10 +1066,8 @@ class DesktopApp:
                 recs     = len(recommendations)
 
                 preview = "\n".join(
-                    f"{i+1:3}. {p}" for i, p in enumerate(optimized[:40])
+                    f"{i+1:3}. {p}" for i, p in enumerate(optimized)
                 )
-                if len(optimized) > 40:
-                    preview += f"\n    … and {len(optimized) - 40} more"
 
                 applied = False  # Track if we applied automatically
                 if self._var_apply.get():

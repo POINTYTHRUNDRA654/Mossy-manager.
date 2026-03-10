@@ -26,11 +26,17 @@ from typing import Optional, Dict, Tuple
 from datetime import datetime, timedelta
 from packaging import version
 
+# Import version from package
+try:
+    from mossy_manager import __version__ as PACKAGE_VERSION
+except ImportError:
+    PACKAGE_VERSION = "1.0.0"
+
 logger = logging.getLogger(__name__)
 
 # Version information
-CURRENT_VERSION = "1.0.0"
-UPDATE_CHECK_URL = "https://api.github.com/repos/YOURUSERNAME/mossy-manager/releases/latest"  # Update with actual repo
+CURRENT_VERSION = PACKAGE_VERSION
+UPDATE_CHECK_URL = "https://api.github.com/repos/POINTYTHRUNDRA654/Mossy-manager/releases/latest"
 UPDATE_CHECK_INTERVAL_DAYS = 1  # Check for updates daily
 
 
@@ -101,10 +107,10 @@ class UpdateManager:
             if version.parse(latest_version) > version.parse(self.current_version):
                 logger.info(f"New version available: {latest_version} (current: {self.current_version})")
 
-                # Find the MossyManager.exe asset
+                # Find the MossyManager_gui.exe asset (or fallback to MossyManager.exe)
                 download_url = None
                 for asset in release_data.get('assets', []):
-                    if asset['name'] == 'MossyManager.exe':
+                    if asset['name'] in ('MossyManager_gui.exe', 'MossyManager.exe'):
                         download_url = asset['browser_download_url']
                         break
 

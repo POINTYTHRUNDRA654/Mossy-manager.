@@ -30,7 +30,7 @@ def main():
     print()
 
     # Check if spec file exists
-    spec_file = Path("MossyManager.spec")
+    spec_file = Path("MossyManager_gui.spec")
     if not spec_file.exists():
         print(f"[FAIL] Spec file not found: {spec_file}")
         return 1
@@ -72,7 +72,7 @@ def main():
         print()
 
         # Check if executable was created (name differs by platform)
-        exe_name = "MossyManager.exe" if sys.platform == "win32" else "MossyManager"
+        exe_name = "MossyManager_gui.exe" if sys.platform == "win32" else "MossyManager_gui"
         exe_path = Path("dist") / exe_name
         if exe_path.exists():
             size_mb = exe_path.stat().st_size / (1024 * 1024)
