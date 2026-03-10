@@ -234,6 +234,11 @@ class UpdateManager:
             # So we use a batch script that waits for this process to exit, then replaces the file
 
             batch_script = self.cache_dir / "apply_update.bat"
+
+            # Find the repository root (go up from cache_dir)
+            repo_root = self.cache_dir.parent.parent.parent.parent  # ~/.mossy_manager/updates -> repo root
+            build_script = repo_root / "build.py"
+
             batch_content = f"""@echo off
 echo Applying Mossy Manager update...
 timeout /t 2 /nobreak >nul
@@ -246,6 +251,19 @@ if errorlevel 1 (
 )
 echo Update applied successfully!
 del "{backup_exe}"
+
+REM Rebuild the executable to ensure latest version is compiled
+if exist "{build_script}" (
+    echo Rebuilding executable...
+    cd /d "{repo_root}"
+    python build.py
+    if errorlevel 1 (
+        echo Warning: Build failed, but update was applied. Starting existing executable...
+    )
+) else (
+    echo Note: build.py not found, skipping rebuild
+)
+
 start "" "{current_exe}"
 del "%~f0"
 """
