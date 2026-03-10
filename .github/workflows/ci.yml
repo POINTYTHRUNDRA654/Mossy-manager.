@@ -43,6 +43,13 @@ jobs:
       contents: read
 
     steps:
+      # Workaround: the repo name ends with a dot which Windows normalises away,
+      # causing actions/checkout to report "Directory does not exist".
+      # Pre-creating the workspace directory via cmd.exe avoids the issue.
+      - name: Create workspace directory (Windows trailing-dot workaround)
+        shell: cmd
+        run: if not exist "%GITHUB_WORKSPACE%" mkdir "%GITHUB_WORKSPACE%"
+
       - name: Checkout code
         uses: actions/checkout@v4
 

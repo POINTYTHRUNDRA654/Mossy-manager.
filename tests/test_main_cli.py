@@ -88,7 +88,7 @@ class TestMainCLIDetect:
             lambda: fake
         )
         from mossy_manager.games.fallout4 import Fallout4Rules
-        monkeypatch.setattr(Fallout4Rules, 'optimize_load_order', lambda order: order)
+        monkeypatch.setattr(Fallout4Rules, 'optimize_load_order', lambda order, data_path=None: order)
 
         from mossy_manager.cli.main import main as click_main
         from click.testing import CliRunner
@@ -111,7 +111,7 @@ class TestMainCLIDetect:
         )
         # stub optimizer
         from mossy_manager.games.fallout4 import Fallout4Rules
-        monkeypatch.setattr(Fallout4Rules, 'optimize_load_order', lambda order: order)
+        monkeypatch.setattr(Fallout4Rules, 'optimize_load_order', lambda order, data_path=None: order)
         # patch ConflictResolver to produce simple output
         import importlib
         cli_module = importlib.import_module('mossy_manager.cli.main')
@@ -146,7 +146,7 @@ class TestMainCLIDetect:
             lambda: fake
         )
         from mossy_manager.games.fallout4 import Fallout4Rules
-        monkeypatch.setattr(Fallout4Rules, 'optimize_load_order', lambda order: order)
+        monkeypatch.setattr(Fallout4Rules, 'optimize_load_order', lambda order, data_path=None: order)
         # stub ConflictResolver so logging is minimal
         import importlib
         cli_module = importlib.import_module('mossy_manager.cli.main')
