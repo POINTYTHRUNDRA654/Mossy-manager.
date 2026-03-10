@@ -309,7 +309,7 @@ class DesktopApp:
         mo2_frame = tk.Frame(bar, bg=PALETTE["bg_dark"])
         mo2_frame.pack(side=tk.RIGHT, padx=4, pady=4)
 
-        self._btn_browse_mo2 = ttk.Button(mo2_frame, text="📁", width=3,
+        self._btn_browse_mo2 = ttk.Button(mo2_frame, text="...", width=3,
                                            command=self._browse_mo2_path)
         self._btn_browse_mo2.pack(side=tk.RIGHT, padx=(4, 0))
 
@@ -512,7 +512,7 @@ class DesktopApp:
 
         self._btn_apply_load_order = ttk.Button(
             btn_frame,
-            text="📝 Apply This Load Order",
+            text="Apply This Load Order",
             command=self._apply_last_optimization,
             style="Accent.TButton"
         )

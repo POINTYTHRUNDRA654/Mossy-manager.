@@ -75,52 +75,6 @@ class MO2Integration:
             ini_file = self.mo2_path / 'ModOrganizer.ini'
 
         if ini_file.exists():
-    
-                @classmethod
-                def detect_mo2_installation(cls) -> Optional[Path]:
-                    """
-                    Enhanced auto-detect for Mod Organizer 2 installation.
-                    - Checks common install paths
-                    - Enumerates all subfolders in %LOCALAPPDATA%\ModOrganizer for valid ModOrganizer.ini (like LOOT)
-                    - Accepts any folder containing ModOrganizer.exe as valid
-                    Returns:
-                        Path to MO2 directory if found, None otherwise
-                    """
-                    logger.info("Attempting to auto-detect MO2 installation (LOOT-style)")
-
-                    # 1. Check all common install paths
-                    for path in cls.MO2_COMMON_PATHS:
-                        if path.exists() and (path / 'ModOrganizer.exe').exists():
-                            logger.info(f"Found MO2 installation at: {path}")
-                            return path
-
-                    # 2. Enumerate all subfolders in %LOCALAPPDATA%\ModOrganizer
-                    localappdata = os.environ.get('LOCALAPPDATA', str(Path.home() / 'AppData' / 'Local'))
-                    modorganizer_root = Path(localappdata) / 'ModOrganizer'
-                    if modorganizer_root.exists():
-                        for sub in modorganizer_root.iterdir():
-                            if sub.is_dir():
-                                ini_file = sub / 'ModOrganizer.ini'
-                                if ini_file.exists():
-                                    # Try to extract the install path from the INI if possible
-                                    try:
-                                        config = configparser.ConfigParser()
-                                        config.read(ini_file, encoding='utf-8')
-                                        # If the INI has a [General] section with 'mo2_path', use it
-                                        if 'General' in config and 'mo2_path' in config['General']:
-                                            mo2_path = Path(config['General']['mo2_path'])
-                                            if mo2_path.exists() and (mo2_path / 'ModOrganizer.exe').exists():
-                                                logger.info(f"Found MO2 install from INI: {mo2_path}")
-                                                return mo2_path
-                                    except Exception as e:
-                                        logger.warning(f"Error reading {ini_file}: {e}")
-                                    # Otherwise, treat the subfolder as a portable MO2 instance if it contains ModOrganizer.exe
-                                    if (sub / 'ModOrganizer.exe').exists():
-                                        logger.info(f"Found portable MO2 instance at: {sub}")
-                                        return sub
-
-                    logger.warning("Could not auto-detect MO2 installation (LOOT-style)")
-                    return None
             config = configparser.ConfigParser()
             try:
                 # MO2 uses UTF-8 with BOM, configparser handles this
@@ -189,18 +143,48 @@ class MO2Integration:
     @classmethod
     def detect_mo2_installation(cls) -> Optional[Path]:
         """
-        Auto-detect Mod Organizer 2 installation
-        
+        Enhanced auto-detect for Mod Organizer 2 installation.
+
+        Checks common install paths, then enumerates all sub-folders in
+        %%LOCALAPPDATA%%\\ModOrganizer for a valid ModOrganizer.ini (the same
+        strategy used by LOOT), and finally accepts any folder that contains
+        ModOrganizer.exe as a valid portable instance.
+
         Returns:
             Path to MO2 directory if found, None otherwise
         """
-        logger.info("Attempting to auto-detect MO2 installation")
-        
+        logger.info("Attempting to auto-detect MO2 installation (LOOT-style)")
+
+        # 1. Check all common install paths
         for path in cls.MO2_COMMON_PATHS:
             if path.exists() and (path / 'ModOrganizer.exe').exists():
                 logger.info(f"Found MO2 installation at: {path}")
                 return path
-        
+
+        # 2. Enumerate all subfolders in %LOCALAPPDATA%\ModOrganizer (like LOOT does)
+        localappdata = os.environ.get('LOCALAPPDATA', str(Path.home() / 'AppData' / 'Local'))
+        modorganizer_root = Path(localappdata) / 'ModOrganizer'
+        if modorganizer_root.exists():
+            for sub in modorganizer_root.iterdir():
+                if sub.is_dir():
+                    ini_file = sub / 'ModOrganizer.ini'
+                    if ini_file.exists():
+                        # Try to extract the install path from the INI
+                        try:
+                            config = configparser.ConfigParser()
+                            config.read(ini_file, encoding='utf-8')
+                            if 'General' in config and 'mo2_path' in config['General']:
+                                mo2_path = Path(config['General']['mo2_path'])
+                                if mo2_path.exists() and (mo2_path / 'ModOrganizer.exe').exists():
+                                    logger.info(f"Found MO2 install from INI: {mo2_path}")
+                                    return mo2_path
+                        except Exception as e:
+                            logger.warning(f"Error reading {ini_file}: {e}")
+                        # Treat the subfolder itself as a portable instance
+                        if (sub / 'ModOrganizer.exe').exists():
+                            logger.info(f"Found portable MO2 instance at: {sub}")
+                            return sub
+
         logger.warning("Could not auto-detect MO2 installation")
         return None
     
